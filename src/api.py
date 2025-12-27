@@ -5,6 +5,7 @@ FastAPI server for accessing market data, signals, and reports
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.openapi.utils import get_openapi
 from datetime import datetime
 from typing import Optional, List
 import os
@@ -20,13 +21,83 @@ from sqlalchemy import desc
 # Initialize database
 init_db()
 
+# API Description
+API_DESCRIPTION = """
+## 📈 B3 Tracker API
+
+API REST para acesso a cotações da B3, ações americanas, commodities e criptomoedas.
+
+### Recursos Disponíveis
+
+- **104 ativos** rastreados (Ibovespa, S&P 500, commodities, crypto)
+- **Indicadores técnicos**: RSI-14, MA50, MA200, Golden/Death Cross
+- **Dados fundamentalistas**: P/E, P/B, Dividend Yield, Beta, ROE
+- **Sinais de trading**: 10 tipos de sinais automáticos
+- **Sentimento de notícias**: Análise bilíngue (PT-BR e EN)
+- **Comparação com benchmarks**: vs IBOV e S&P 500
+
+### Tipos de Ativos
+
+| Tipo | Descrição | Exemplo |
+|------|-----------|---------|
+| `stock` | Ações brasileiras (B3) | PETR4, VALE3, ITUB4 |
+| `us_stock` | Ações americanas | AAPL, GOOGL, MSFT |
+| `commodity` | Commodities | GC=F (Ouro), CL=F (Petróleo) |
+| `crypto` | Criptomoedas | BTC-USD, ETH-USD |
+| `currency` | Moedas | USDBRL=X |
+
+### Sinais de Trading
+
+| Sinal | Descrição | Ação Sugerida |
+|-------|-----------|---------------|
+| `RSI_OVERSOLD` | RSI < 30 | Potencial compra |
+| `RSI_OVERBOUGHT` | RSI > 70 | Potencial venda |
+| `GOLDEN_CROSS` | MA50 cruzou acima MA200 | Bullish |
+| `BULLISH_TREND` | Preço acima de MA50 e MA200 | Tendência de alta |
+| `BEARISH_TREND` | Preço abaixo de MA50 e MA200 | Tendência de baixa |
+| `NEAR_52W_HIGH` | Dentro de 5% da máxima 52 semanas | Momentum |
+| `NEAR_52W_LOW` | Dentro de 5% da mínima 52 semanas | Possível fundo |
+| `VOLUME_SPIKE` | Volume > 2x média | Atenção |
+| `POSITIVE_NEWS` | Sentimento > 0.3 | Notícias positivas |
+| `NEGATIVE_NEWS` | Sentimento < -0.3 | Notícias negativas |
+"""
+
 # Create FastAPI app
 app = FastAPI(
     title="B3 Tracker API",
-    description="API para acesso a cotações da B3, ações americanas, commodities e criptomoedas",
+    description=API_DESCRIPTION,
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    openapi_tags=[
+        {
+            "name": "Cotações",
+            "description": "Endpoints para consulta de cotações e dados de ativos"
+        },
+        {
+            "name": "Sinais",
+            "description": "Detecção automática de sinais de trading"
+        },
+        {
+            "name": "Notícias",
+            "description": "Análise de sentimento de notícias"
+        },
+        {
+            "name": "Análise",
+            "description": "Relatórios e análises consolidadas"
+        },
+        {
+            "name": "Sistema",
+            "description": "Health check e operações do sistema"
+        },
+    ],
+    contact={
+        "name": "B3 Tracker",
+        "url": "https://github.com/your-repo/b3-tracker",
+    },
+    license_info={
+        "name": "MIT",
+    },
 )
 
 # CORS middleware - allow all origins for development
@@ -169,9 +240,15 @@ def detect_signals(quote: Quote) -> List[str]:
 # ROUTES
 # =============================================================================
 
-@app.get("/")
+@app.get("/", tags=["Sistema"])
 async def root():
-    """Health check and API info"""
+    """
+    🏠 **Health Check**
+    
+    Retorna informações sobre a API e lista de endpoints disponíveis.
+    
+    Use este endpoint para verificar se a API está funcionando.
+    """
     return {
         "name": "B3 Tracker API",
         "version": "1.0.0",
@@ -189,16 +266,33 @@ async def root():
     }
 
 
-@app.get("/api/quotes")
+@app.get("/api/quotes", tags=["Cotações"], summary="Listar todas as cotações")
 async def get_quotes(
-    type: Optional[str] = Query(None, description="Filter by asset type: stock, us_stock, commodity, crypto, currency"),
-    limit: int = Query(200, description="Maximum number of results")
+    type: Optional[str] = Query(
+        None, 
+        description="Filtrar por tipo de ativo",
+        enum=["stock", "us_stock", "commodity", "crypto", "currency"],
+        example="stock"
+    ),
+    limit: int = Query(200, description="Número máximo de resultados", ge=1, le=500)
 ):
     """
-    Get all current quotes.
+    📊 **Lista todas as cotações atuais**
     
-    Optional filters:
-    - type: stock, us_stock, commodity, crypto, currency
+    Retorna a cotação mais recente de cada ativo rastreado.
+    
+    **Exemplos de uso:**
+    - Todas as cotações: `GET /api/quotes`
+    - Apenas ações BR: `GET /api/quotes?type=stock`
+    - Apenas ações US: `GET /api/quotes?type=us_stock`
+    - Apenas commodities: `GET /api/quotes?type=commodity`
+    
+    **Campos retornados:**
+    - Preços em BRL e USD
+    - Variações (1D, 1W, 1M, YTD)
+    - Indicadores técnicos (RSI, MA50, MA200)
+    - Dados fundamentalistas (P/E, P/B, DY)
+    - Sentimento de notícias
     """
     db = SessionLocal()
     try:
@@ -212,12 +306,28 @@ async def get_quotes(
         db.close()
 
 
-@app.get("/api/quotes/{ticker}")
+@app.get("/api/quotes/{ticker}", tags=["Cotações"], summary="Cotação de um ativo específico")
 async def get_quote(ticker: str):
     """
-    Get detailed data for a specific ticker.
+    🔍 **Dados detalhados de um ativo específico**
     
-    Example: /api/quotes/PETR4 or /api/quotes/PETR4.SA
+    Retorna todos os dados disponíveis para um ticker, incluindo sinais detectados.
+    
+    **Formatos aceitos:**
+    - `PETR4` - Busca automaticamente com sufixo .SA
+    - `PETR4.SA` - Formato completo
+    - `AAPL` - Ações americanas (sem sufixo)
+    
+    **Dados retornados:**
+    - Preços (BRL e USD)
+    - Variações históricas (1D, 1W, 1M, YTD)
+    - Indicadores técnicos (RSI-14, MA50, MA200, Golden Cross)
+    - Range 52 semanas (high/low)
+    - Volume e volume ratio
+    - Dados fundamentalistas (P/E, P/B, DY, Beta, ROE)
+    - Comparação vs benchmarks (IBOV, S&P 500)
+    - Sentimento de notícias
+    - **Sinais de trading detectados**
     """
     db = SessionLocal()
     try:
@@ -249,24 +359,38 @@ async def get_quote(ticker: str):
         db.close()
 
 
-@app.get("/api/signals")
+@app.get("/api/signals", tags=["Sinais"], summary="Sinais de trading ativos")
 async def get_signals(
-    signal_type: Optional[str] = Query(None, description="Filter by signal: RSI_OVERSOLD, RSI_OVERBOUGHT, GOLDEN_CROSS, etc")
+    signal_type: Optional[str] = Query(
+        None, 
+        description="Filtrar por tipo de sinal específico",
+        enum=["RSI_OVERSOLD", "RSI_OVERBOUGHT", "GOLDEN_CROSS", "BULLISH_TREND", 
+              "BEARISH_TREND", "NEAR_52W_HIGH", "NEAR_52W_LOW", "VOLUME_SPIKE",
+              "POSITIVE_NEWS", "NEGATIVE_NEWS"],
+        example="RSI_OVERSOLD"
+    )
 ):
     """
-    Get all active trading signals.
+    🚦 **Sinais de Trading Detectados**
     
-    Signal types:
-    - RSI_OVERSOLD: RSI < 30 (potential buy)
-    - RSI_OVERBOUGHT: RSI > 70 (potential sell)
-    - GOLDEN_CROSS: MA50 crossed above MA200
-    - BULLISH_TREND: Above MA50 and MA200
-    - BEARISH_TREND: Below MA50 and MA200
-    - NEAR_52W_HIGH: Within 5% of 52-week high
-    - NEAR_52W_LOW: Within 5% of 52-week low
-    - VOLUME_SPIKE: Volume > 2x average
-    - POSITIVE_NEWS: Sentiment score > 0.3
-    - NEGATIVE_NEWS: Sentiment score < -0.3
+    Retorna todos os ativos com sinais de trading ativos, agrupados por tipo.
+    
+    **Tipos de Sinais:**
+    
+    | Sinal | Condição | Interpretação |
+    |-------|----------|---------------|
+    | `RSI_OVERSOLD` | RSI < 30 | Sobrevendido - potencial compra |
+    | `RSI_OVERBOUGHT` | RSI > 70 | Sobrecomprado - potencial venda |
+    | `GOLDEN_CROSS` | MA50 > MA200 | Cruzamento de alta |
+    | `BULLISH_TREND` | Preço > MA50 e MA200 | Tendência de alta |
+    | `BEARISH_TREND` | Preço < MA50 e MA200 | Tendência de baixa |
+    | `NEAR_52W_HIGH` | < 5% da máxima 52w | Momentum positivo |
+    | `NEAR_52W_LOW` | < 5% da mínima 52w | Possível fundo |
+    | `VOLUME_SPIKE` | Volume > 2x média | Atividade incomum |
+    | `POSITIVE_NEWS` | Sentimento > 0.3 | Notícias positivas |
+    | `NEGATIVE_NEWS` | Sentimento < -0.3 | Notícias negativas |
+    
+    **Exemplo:** `GET /api/signals?signal_type=RSI_OVERSOLD`
     """
     db = SessionLocal()
     try:
@@ -307,12 +431,34 @@ async def get_signals(
         db.close()
 
 
-@app.get("/api/news")
+@app.get("/api/news", tags=["Notícias"], summary="Sentimento de notícias")
 async def get_news(
-    sentiment: Optional[str] = Query(None, description="Filter: positive, negative, neutral")
+    sentiment: Optional[str] = Query(
+        None, 
+        description="Filtrar por sentimento",
+        enum=["positive", "negative", "neutral"],
+        example="positive"
+    )
 ):
     """
-    Get news sentiment analysis for all assets with news.
+    📰 **Análise de Sentimento de Notícias**
+    
+    Retorna o sentimento de notícias recentes para cada ativo.
+    
+    **Fontes de dados:**
+    - 🇧🇷 Google News RSS (português)
+    - 🇺🇸 Yahoo Finance News (inglês)
+    
+    **Análise:**
+    - VADER Sentiment com léxico financeiro em português
+    - Score de -1.0 (muito negativo) a +1.0 (muito positivo)
+    
+    **Filtros:**
+    - `positive`: score > 0.1
+    - `negative`: score < -0.1
+    - `neutral`: -0.1 ≤ score ≤ 0.1
+    
+    **Exemplo:** `GET /api/news?sentiment=positive`
     """
     db = SessionLocal()
     try:
@@ -364,10 +510,20 @@ async def get_news(
         db.close()
 
 
-@app.get("/api/sectors")
+@app.get("/api/sectors", tags=["Análise"], summary="Performance por setor")
 async def get_sectors():
     """
-    Get performance aggregated by sector.
+    🏭 **Performance Agregada por Setor**
+    
+    Retorna métricas agregadas para cada setor da bolsa brasileira.
+    
+    **Métricas por setor:**
+    - Variação média 1D e YTD
+    - RSI médio
+    - Contagem de ações bullish/bearish
+    - Lista de tickers
+    
+    Ordenado por performance YTD (melhor primeiro).
     """
     db = SessionLocal()
     try:
@@ -427,11 +583,22 @@ async def get_sectors():
         db.close()
 
 
-@app.get("/api/report")
+@app.get("/api/report", tags=["Análise"], summary="Relatório consolidado")
 async def get_report():
     """
-    Get consolidated report (same as --report command).
-    Returns structured data for AI consumption.
+    📋 **Relatório Consolidado para AI**
+    
+    Retorna um relatório completo estruturado para consumo por modelos de AI.
+    
+    **Conteúdo:**
+    - Contexto de mercado (IBOV YTD, S&P 500 YTD, USD/BRL)
+    - Top movers (maiores altas e quedas)
+    - Resumo de sinais por tipo
+    - Sentimento de notícias
+    - Insights acionáveis (potential_buys, potential_sells, momentum_stocks)
+    - Dados completos de todos os ativos
+    
+    Este é o mesmo relatório gerado pelo comando `--report`.
     """
     from exporter import generate_report_data
     
@@ -445,11 +612,19 @@ async def get_report():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/refresh")
+@app.post("/api/refresh", tags=["Sistema"], summary="Atualizar dados")
 async def refresh_data(background_tasks: BackgroundTasks):
     """
-    Trigger a data refresh in the background.
-    Returns immediately, data will be updated asynchronously.
+    🔄 **Disparar Atualização de Dados**
+    
+    Inicia uma atualização completa de todos os ativos em background.
+    
+    **Comportamento:**
+    - Retorna imediatamente com status "started"
+    - Dados são atualizados em ~30 segundos (fetch paralelo)
+    - Consulte `/api/quotes` para ver dados atualizados
+    
+    **Nota:** Use com moderação para evitar rate limiting das APIs.
     """
     from fetcher import fetch_all_quotes
     
@@ -462,13 +637,28 @@ async def refresh_data(background_tasks: BackgroundTasks):
     }
 
 
-@app.get("/api/movers")
+@app.get("/api/movers", tags=["Cotações"], summary="Top gainers e losers")
 async def get_movers(
-    period: str = Query("1d", description="Period: 1d, 1w, 1m, ytd"),
-    limit: int = Query(10, description="Number of top/bottom movers")
+    period: str = Query(
+        "1d", 
+        description="Período de análise",
+        enum=["1d", "1w", "1m", "ytd"],
+        example="ytd"
+    ),
+    limit: int = Query(10, description="Número de ativos por lista", ge=1, le=50)
 ):
     """
-    Get top gainers and losers for a given period.
+    🔥 **Maiores Altas e Quedas**
+    
+    Retorna os top gainers e losers para um período específico.
+    
+    **Períodos disponíveis:**
+    - `1d`: Variação no dia
+    - `1w`: Variação na semana
+    - `1m`: Variação no mês
+    - `ytd`: Variação no ano (year-to-date)
+    
+    **Exemplo:** `GET /api/movers?period=ytd&limit=5`
     """
     db = SessionLocal()
     try:
