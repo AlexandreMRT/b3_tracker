@@ -116,6 +116,162 @@ def calculate_technical_indicators(hist, current_price: float) -> dict:
     if rsi is not None:
         result["rsi_14"] = rsi
     
+    # Volatility (30-day standard deviation of daily returns)
+    if len(hist) >= 30:
+        returns = hist['Close'].pct_change().tail(30)
+        result["volatility_30d"] = float(returns.std() * 100)  # As percentage
+    
+    # Volume analysis
+    if len(hist) >= 20 and 'Volume' in hist.columns:
+        avg_vol = float(hist['Volume'].tail(20).mean())
+        current_vol = float(hist['Volume'].iloc[-1])
+        result["avg_volume_20d"] = avg_vol
+        if avg_vol > 0:
+            result["volume_ratio"] = current_vol / avg_vol
+    
+    return result
+
+
+def calculate_signals(quote_data: dict) -> dict:
+    """Calculate trading signals based on technical indicators"""
+    signals = {}
+    
+    # RSI signals
+    rsi = quote_data.get("rsi_14")
+    if rsi is not None:
+        signals["signal_rsi_oversold"] = 1 if rsi < 30 else 0
+        signals["signal_rsi_overbought"] = 1 if rsi > 70 else 0
+    
+    # 52-week high/low signals (within 5%)
+    pct_from_high = quote_data.get("pct_from_52w_high")
+    week_52_high = quote_data.get("week_52_high")
+    week_52_low = quote_data.get("week_52_low")
+    close = quote_data.get("close")
+    
+    if pct_from_high is not None:
+        signals["signal_52w_high"] = 1 if pct_from_high >= -5 else 0
+    
+    if week_52_low and close:
+        pct_from_low = ((close - week_52_low) / week_52_low) * 100
+        signals["signal_52w_low"] = 1 if pct_from_low <= 5 else 0
+    
+    # Volume spike (2x average)
+    volume_ratio = quote_data.get("volume_ratio")
+    if volume_ratio is not None:
+        signals["signal_volume_spike"] = 1 if volume_ratio >= 2.0 else 0
+    
+    # Golden/Death cross
+    ma_50_above_200 = quote_data.get("ma_50_above_200")
+    signals["signal_golden_cross"] = 1 if ma_50_above_200 == 1 else 0
+    signals["signal_death_cross"] = 1 if ma_50_above_200 == 0 else 0
+    
+    # Overall signal summary
+    bullish_count = sum([
+        signals.get("signal_rsi_oversold", 0),
+        signals.get("signal_52w_low", 0),
+        signals.get("signal_golden_cross", 0),
+        1 if quote_data.get("above_ma_50") == 1 else 0,
+        1 if quote_data.get("above_ma_200") == 1 else 0,
+    ])
+    
+    bearish_count = sum([
+        signals.get("signal_rsi_overbought", 0),
+        signals.get("signal_52w_high", 0),
+        signals.get("signal_death_cross", 0),
+        1 if quote_data.get("above_ma_50") == 0 else 0,
+        1 if quote_data.get("above_ma_200") == 0 else 0,
+    ])
+    
+    if bullish_count >= 3 and bullish_count > bearish_count:
+        signals["signal_summary"] = "bullish"
+    elif bearish_count >= 3 and bearish_count > bullish_count:
+        signals["signal_summary"] = "bearish"
+    else:
+        signals["signal_summary"] = "neutral"
+    
+    return signals
+
+
+# Global cache for benchmark data (fetched once per run)
+_benchmark_cache = {}
+
+
+def fetch_benchmark_data() -> dict:
+    """Fetch Ibovespa and S&P 500 historical changes (cached)"""
+    global _benchmark_cache
+    
+    if _benchmark_cache:
+        return _benchmark_cache
+    
+    print("📊 Buscando dados de benchmark (IBOV, S&P500)...")
+    
+    benchmarks = {
+        "^BVSP": "ibov",   # Ibovespa
+        "^GSPC": "sp500",  # S&P 500
+    }
+    
+    result = {}
+    
+    for ticker_symbol, prefix in benchmarks.items():
+        try:
+            ticker = yf.Ticker(ticker_symbol)
+            hist = ticker.history(period="1y")
+            
+            if hist.empty:
+                continue
+            
+            today = hist.index[-1].date()
+            current_price = float(hist['Close'].iloc[-1])
+            
+            # Calculate changes
+            date_1d = today - timedelta(days=1)
+            date_1w = today - timedelta(weeks=1)
+            date_1m = today - timedelta(days=30)
+            date_ytd = date(today.year, 1, 1)
+            
+            price_1d = get_historical_price(hist, date_1d)
+            price_1w = get_historical_price(hist, date_1w)
+            price_1m = get_historical_price(hist, date_1m)
+            price_ytd = get_historical_price(hist, date_ytd)
+            
+            result[f"{prefix}_change_1d"] = calculate_change_percent(current_price, price_1d)
+            result[f"{prefix}_change_1w"] = calculate_change_percent(current_price, price_1w)
+            result[f"{prefix}_change_1m"] = calculate_change_percent(current_price, price_1m)
+            result[f"{prefix}_change_ytd"] = calculate_change_percent(current_price, price_ytd)
+            
+            print(f"  ✅ {ticker_symbol}: YTD {result[f'{prefix}_change_ytd']:.1f}%")
+            
+        except Exception as e:
+            print(f"  ⚠️ Error fetching {ticker_symbol}: {e}")
+    
+    _benchmark_cache = result
+    return result
+
+
+def calculate_benchmark_comparison(quote_data: dict, benchmarks: dict) -> dict:
+    """Calculate outperformance vs benchmarks"""
+    result = {}
+    
+    # Copy benchmark data
+    for key, value in benchmarks.items():
+        result[key] = value
+    
+    # Calculate outperformance vs Ibovespa
+    if quote_data.get("change_1d") and benchmarks.get("ibov_change_1d"):
+        result["vs_ibov_1d"] = quote_data["change_1d"] - benchmarks["ibov_change_1d"]
+    if quote_data.get("change_1m") and benchmarks.get("ibov_change_1m"):
+        result["vs_ibov_1m"] = quote_data["change_1m"] - benchmarks["ibov_change_1m"]
+    if quote_data.get("change_ytd") and benchmarks.get("ibov_change_ytd"):
+        result["vs_ibov_ytd"] = quote_data["change_ytd"] - benchmarks["ibov_change_ytd"]
+    
+    # Calculate outperformance vs S&P 500
+    if quote_data.get("change_1d") and benchmarks.get("sp500_change_1d"):
+        result["vs_sp500_1d"] = quote_data["change_1d"] - benchmarks["sp500_change_1d"]
+    if quote_data.get("change_1m") and benchmarks.get("sp500_change_1m"):
+        result["vs_sp500_1m"] = quote_data["change_1m"] - benchmarks["sp500_change_1m"]
+    if quote_data.get("change_ytd") and benchmarks.get("sp500_change_ytd"):
+        result["vs_sp500_ytd"] = quote_data["change_ytd"] - benchmarks["sp500_change_ytd"]
+    
     return result
 
 
@@ -215,6 +371,10 @@ def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
         # Merge fundamentals and technicals
         result.update(fundamentals)
         result.update(technicals)
+        
+        # Calculate signals
+        signals = calculate_signals(result)
+        result.update(signals)
         
         return result
         
@@ -334,6 +494,34 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
         existing.analyst_rating = quote_data.get("analyst_rating")
         existing.target_price = quote_data.get("target_price")
         existing.num_analysts = quote_data.get("num_analysts")
+        # Benchmark data
+        existing.ibov_change_1d = quote_data.get("ibov_change_1d")
+        existing.ibov_change_1w = quote_data.get("ibov_change_1w")
+        existing.ibov_change_1m = quote_data.get("ibov_change_1m")
+        existing.ibov_change_ytd = quote_data.get("ibov_change_ytd")
+        existing.sp500_change_1d = quote_data.get("sp500_change_1d")
+        existing.sp500_change_1w = quote_data.get("sp500_change_1w")
+        existing.sp500_change_1m = quote_data.get("sp500_change_1m")
+        existing.sp500_change_ytd = quote_data.get("sp500_change_ytd")
+        existing.vs_ibov_1d = quote_data.get("vs_ibov_1d")
+        existing.vs_ibov_1m = quote_data.get("vs_ibov_1m")
+        existing.vs_ibov_ytd = quote_data.get("vs_ibov_ytd")
+        existing.vs_sp500_1d = quote_data.get("vs_sp500_1d")
+        existing.vs_sp500_1m = quote_data.get("vs_sp500_1m")
+        existing.vs_sp500_ytd = quote_data.get("vs_sp500_ytd")
+        # Signals
+        existing.signal_golden_cross = quote_data.get("signal_golden_cross")
+        existing.signal_death_cross = quote_data.get("signal_death_cross")
+        existing.signal_rsi_oversold = quote_data.get("signal_rsi_oversold")
+        existing.signal_rsi_overbought = quote_data.get("signal_rsi_overbought")
+        existing.signal_52w_high = quote_data.get("signal_52w_high")
+        existing.signal_52w_low = quote_data.get("signal_52w_low")
+        existing.signal_volume_spike = quote_data.get("signal_volume_spike")
+        existing.signal_summary = quote_data.get("signal_summary")
+        # Volatility
+        existing.volatility_30d = quote_data.get("volatility_30d")
+        existing.avg_volume_20d = quote_data.get("avg_volume_20d")
+        existing.volume_ratio = quote_data.get("volume_ratio")
         existing.fetched_at = datetime.utcnow()
         print(f"🔄 Atualizado: {asset.ticker} = R$ {price_brl:.2f}")
     else:
@@ -386,6 +574,34 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
             analyst_rating=quote_data.get("analyst_rating"),
             target_price=quote_data.get("target_price"),
             num_analysts=quote_data.get("num_analysts"),
+            # Benchmark data
+            ibov_change_1d=quote_data.get("ibov_change_1d"),
+            ibov_change_1w=quote_data.get("ibov_change_1w"),
+            ibov_change_1m=quote_data.get("ibov_change_1m"),
+            ibov_change_ytd=quote_data.get("ibov_change_ytd"),
+            sp500_change_1d=quote_data.get("sp500_change_1d"),
+            sp500_change_1w=quote_data.get("sp500_change_1w"),
+            sp500_change_1m=quote_data.get("sp500_change_1m"),
+            sp500_change_ytd=quote_data.get("sp500_change_ytd"),
+            vs_ibov_1d=quote_data.get("vs_ibov_1d"),
+            vs_ibov_1m=quote_data.get("vs_ibov_1m"),
+            vs_ibov_ytd=quote_data.get("vs_ibov_ytd"),
+            vs_sp500_1d=quote_data.get("vs_sp500_1d"),
+            vs_sp500_1m=quote_data.get("vs_sp500_1m"),
+            vs_sp500_ytd=quote_data.get("vs_sp500_ytd"),
+            # Signals
+            signal_golden_cross=quote_data.get("signal_golden_cross"),
+            signal_death_cross=quote_data.get("signal_death_cross"),
+            signal_rsi_oversold=quote_data.get("signal_rsi_oversold"),
+            signal_rsi_overbought=quote_data.get("signal_rsi_overbought"),
+            signal_52w_high=quote_data.get("signal_52w_high"),
+            signal_52w_low=quote_data.get("signal_52w_low"),
+            signal_volume_spike=quote_data.get("signal_volume_spike"),
+            signal_summary=quote_data.get("signal_summary"),
+            # Volatility
+            volatility_30d=quote_data.get("volatility_30d"),
+            avg_volume_20d=quote_data.get("avg_volume_20d"),
+            volume_ratio=quote_data.get("volume_ratio"),
             quote_date=datetime.combine(quote_date, datetime.min.time())
         )
         db.add(quote)
@@ -407,14 +623,21 @@ def fetch_all_quotes():
         usd_brl = get_usd_brl_rate()
         print(f"💵 Cotação USD/BRL: R$ {usd_brl:.4f}\n")
         
+        # Fetch benchmark data once (Ibovespa and S&P 500)
+        benchmarks = fetch_benchmark_data()
+        
         success_count = 0
         error_count = 0
         
         # Buscar ações brasileiras (preço nativo em BRL, calcular USD)
-        print("📈 Buscando ações do Ibovespa...")
+        print("\n📈 Buscando ações do Ibovespa...")
         for ticker, info in IBOVESPA_STOCKS.items():
             quote_data = fetch_quote_with_history(ticker)
             if quote_data:
+                # Add benchmark comparison
+                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
+                quote_data.update(benchmark_comparison)
+                
                 price_brl = quote_data["close"]
                 price_usd = price_brl / usd_brl  # Converter BRL para USD
                 asset = get_or_create_asset(db, ticker, info, "stock")
@@ -428,6 +651,10 @@ def fetch_all_quotes():
         for ticker, info in US_STOCKS.items():
             quote_data = fetch_quote_with_history(ticker)
             if quote_data:
+                # Add benchmark comparison
+                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
+                quote_data.update(benchmark_comparison)
+                
                 price_usd = quote_data["close"]
                 price_brl = price_usd * usd_brl  # Converter USD para BRL
                 asset = get_or_create_asset(db, ticker, info, "us_stock")
@@ -441,6 +668,10 @@ def fetch_all_quotes():
         for ticker, info in COMMODITIES.items():
             quote_data = fetch_quote_with_history(ticker)
             if quote_data:
+                # Add benchmark comparison
+                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
+                quote_data.update(benchmark_comparison)
+                
                 price_usd = quote_data["close"]
                 price_brl = price_usd * usd_brl
                 asset = get_or_create_asset(db, ticker, info, "commodity")
@@ -454,6 +685,10 @@ def fetch_all_quotes():
         for ticker, info in CRYPTO.items():
             quote_data = fetch_quote_with_history(ticker)
             if quote_data:
+                # Add benchmark comparison
+                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
+                quote_data.update(benchmark_comparison)
+                
                 price_usd = quote_data["close"]
                 price_brl = price_usd * usd_brl
                 asset = get_or_create_asset(db, ticker, info, "crypto")
@@ -467,6 +702,10 @@ def fetch_all_quotes():
         for ticker, info in CURRENCY.items():
             quote_data = fetch_quote_with_history(ticker)
             if quote_data:
+                # Add benchmark comparison
+                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
+                quote_data.update(benchmark_comparison)
+                
                 asset = get_or_create_asset(db, ticker, info, "currency")
                 # Dólar: preço já é em BRL, USD é sempre 1
                 save_quote(db, asset, quote_data, quote_data["close"], 1.0)
