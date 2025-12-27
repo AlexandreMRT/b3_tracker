@@ -11,6 +11,7 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 - 🔬 **Análise fundamentalista** - P/E, P/B, dividend yield, beta, ROE
 - 📉 **Indicadores técnicos** - RSI-14, MA50, MA200, golden/death cross
 - 🚦 **Trading signals** - Detecção automática de sinais bullish/bearish
+- 📰 **News sentiment** - Análise de sentimento de notícias (PT-BR e EN)
 - 🤖 **AI-ready exports** - JSON otimizado para modelos de machine learning
 
 ## 🚀 Quick Start
@@ -48,7 +49,8 @@ docker compose down
 | `python src/main.py --export` | Exporta dados existentes para CSV/JSON |
 | `python src/main.py --summary` | Mostra resumo das cotações no terminal |
 | `python src/main.py --signals` | Mostra sinais de trading detectados |
-| `python src/main.py --ai` | Mostra análise AI + sinais |
+| `python src/main.py --news` | Mostra análise de sentimento de notícias |
+| `python src/main.py --ai` | Mostra análise AI + sinais + news |
 
 ## 📁 Estrutura do Projeto
 
@@ -166,6 +168,14 @@ b3_tracker/
 - Target price
 - Number of analysts
 
+### 📰 News Sentiment (Novo!)
+- `news_sentiment_pt` - Score de notícias em português (-1 a +1)
+- `news_sentiment_en` - Score de notícias em inglês (-1 a +1)
+- `news_sentiment_combined` - Score combinado (60% PT + 40% EN para BR)
+- `news_count_pt` / `news_count_en` - Quantidade de notícias
+- `news_headline_pt` / `news_headline_en` - Manchete mais recente
+- `news_sentiment_label` - positive / negative / neutral
+
 ## 📊 Formato dos Dados Exportados
 
 ### CSV
@@ -245,6 +255,33 @@ AAPL,Apple,Technology,us_stock,1515.57,273.39,+0.3,+1.2,+3.1,+28.5,-5.3,+10.7,28
 ================================================================================
 ```
 
+## 📰 News Sentiment Output
+
+```
+========================================================================================================================
+  📰 NEWS SENTIMENT ANALYSIS
+========================================================================================================================
+
+🇧🇷 BRAZIL - 🟢 POSITIVE SENTIMENT (12 stocks):
+   RDOR3    Rede D'Or        PT: +0.50 (10) | EN:   N/A (2) | Combined: +0.50
+            "Rede D'Or supera R$ 100 bi em valor de mercado..."
+   TOTS3    Totvs            PT: +0.39 (10) | EN:   N/A (10) | Combined: +0.39
+            "No deserto de ações de IA e tecnologia na B3..."
+
+🇧🇷 BRAZIL - 🔴 NEGATIVE SENTIMENT (5 stocks):
+   OIBR3    Oi ON            PT: -0.63 (10) | EN:   N/A (2) | Combined: -0.63
+            "A Oi (OIBR3) faliu: e agora, como ficam os acionistas?"
+   USIM5    Usiminas         PT: -0.36 (10) | EN:   N/A (10) | Combined: -0.36
+            "Por que as ações da Usiminas estão caindo?"
+
+🇺🇸 USA - 🟢 POSITIVE SENTIMENT (8 stocks):
+   NVDA     NVIDIA           EN: +0.45 (5 articles)
+            "NVIDIA beats expectations with record datacenter revenue..."
+========================================================================================================================
+Summary: 12 positive | 5 negative | 59 neutral | 96 stocks with news
+========================================================================================================================
+```
+
 ## ⚙️ Configuração
 
 ### Variáveis de Ambiente
@@ -302,6 +339,9 @@ docker compose run --rm runner python src/main.py --ai
 
 # Verificar sinais de trading
 docker compose run --rm runner python src/main.py --signals
+
+# Ver análise de sentimento de notícias
+docker compose run --rm runner python src/main.py --news
 
 # Exportar para análise
 docker compose run --rm runner python src/main.py --export --json
