@@ -6,6 +6,7 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 
 - 📊 **104 ativos rastreados** (Ibovespa, S&P 500, commodities, crypto)
 - ⚡ **Fetch paralelo** - 8 workers simultâneos (~30s para 104 ativos)
+- 🌐 **REST API** - FastAPI com Swagger UI em http://localhost:8000/docs
 - 💱 **Dual currency** - Preços em BRL e USD para todos os ativos
 - 📈 **Comparações históricas** - 1D, 1W, 1M, YTD, 5Y, ALL
 - 🎯 **Benchmark comparison** - Performance vs IBOV e S&P 500
@@ -75,6 +76,67 @@ Arquivo `exports/ai_report_YYYY-MM-DD.json` com:
 - `actionable_insights` - Listas de potential_buys, potential_sells, momentum_stocks
 - `full_data` - Dados completos de todos os 104 ativos
 
+## 🌐 REST API
+
+A API REST está disponível na porta 8000 com documentação Swagger automática.
+
+### Iniciar a API
+
+```bash
+docker compose up -d api
+```
+
+Acesse: http://localhost:8000/docs para a documentação interativa.
+
+### Endpoints Disponíveis
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/` | GET | Health check e lista de endpoints |
+| `/api/quotes` | GET | Todas as cotações (com filtro `?type=stock`) |
+| `/api/quotes/{ticker}` | GET | Dados detalhados de um ativo (ex: `/api/quotes/PETR4`) |
+| `/api/signals` | GET | Sinais de trading ativos (com filtro `?signal_type=RSI_OVERSOLD`) |
+| `/api/news` | GET | Sentimento de notícias (com filtro `?sentiment=positive`) |
+| `/api/sectors` | GET | Performance agregada por setor |
+| `/api/movers` | GET | Top gainers/losers (com filtro `?period=ytd&limit=10`) |
+| `/api/report` | GET | Relatório consolidado completo |
+| `/api/refresh` | POST | Disparar atualização de dados em background |
+| `/docs` | GET | Swagger UI interativo |
+
+### Exemplos de Uso
+
+```bash
+# Cotação da Petrobras
+curl http://localhost:8000/api/quotes/PETR4
+
+# Ações com RSI oversold (potencial compra)
+curl "http://localhost:8000/api/signals?signal_type=RSI_OVERSOLD"
+
+# Notícias positivas
+curl "http://localhost:8000/api/news?sentiment=positive"
+
+# Top 5 maiores altas YTD
+curl "http://localhost:8000/api/movers?period=ytd&limit=5"
+
+# Performance por setor
+curl http://localhost:8000/api/sectors
+```
+
+### Tipos de Sinais
+
+| Sinal | Descrição |
+|-------|-----------|
+| `RSI_OVERSOLD` | RSI < 30 (potencial compra) |
+| `RSI_OVERBOUGHT` | RSI > 70 (potencial venda) |
+| `GOLDEN_CROSS` | MA50 cruzou acima da MA200 |
+| `BULLISH_TREND` | Acima de MA50 e MA200 |
+| `BEARISH_TREND` | Abaixo de MA50 e MA200 |
+| `NEAR_52W_HIGH` | Dentro de 5% da máxima 52 semanas |
+| `NEAR_52W_LOW` | Dentro de 5% da mínima 52 semanas |
+| `VOLUME_SPIKE` | Volume > 2x média |
+| `POSITIVE_NEWS` | Sentimento de notícias > 0.3 |
+| `NEGATIVE_NEWS` | Sentimento de notícias < -0.3 |
+
 ## 📁 Estrutura do Projeto
 
 ```
@@ -83,7 +145,8 @@ b3_tracker/
 ├── Dockerfile            # Imagem Python
 ├── requirements.txt      # Dependências
 ├── src/
-│   ├── main.py           # Ponto de entrada
+│   ├── main.py           # CLI entry point
+│   ├── api.py            # REST API (FastAPI)
 │   ├── assets.py         # Lista de ativos (97+ ações)
 │   ├── database.py       # Conexão SQLite
 │   ├── models.py         # Modelos de dados (70+ campos)
