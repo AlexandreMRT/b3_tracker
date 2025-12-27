@@ -630,6 +630,366 @@ def export_ai_json(filename: Optional[str] = None) -> str:
         db.close()
 
 
+def generate_report_data() -> dict:
+    """
+    Gera dados consolidados para relatórios (human e AI).
+    Retorna um dicionário com todos os dados processados.
+    """
+    db = SessionLocal()
+    
+    try:
+        quotes = get_latest_quotes(db)
+        
+        if not quotes:
+            return None
+        
+        rows = [format_quote_row(q) for q in quotes]
+        
+        # Separate by type
+        br_stocks = [r for r in rows if r["tipo"] == "stock"]
+        us_stocks = [r for r in rows if r["tipo"] == "us_stock"]
+        commodities = [r for r in rows if r["tipo"] == "commodity"]
+        crypto = [r for r in rows if r["tipo"] == "crypto"]
+        all_stocks = br_stocks + us_stocks
+        
+        # Top movers (1D)
+        stocks_with_1d = [r for r in all_stocks if r.get("var_1d") is not None]
+        top_gainers = sorted(stocks_with_1d, key=lambda x: x.get("var_1d", 0), reverse=True)[:10]
+        top_losers = sorted(stocks_with_1d, key=lambda x: x.get("var_1d", 0))[:10]
+        
+        # Signals
+        bullish = [r for r in all_stocks if r.get('signal_summary') == 'bullish']
+        bearish = [r for r in all_stocks if r.get('signal_summary') == 'bearish']
+        oversold = [r for r in all_stocks if r.get('signal_rsi_oversold') == 1]
+        overbought = [r for r in all_stocks if r.get('signal_rsi_overbought') == 1]
+        near_52w_high = [r for r in all_stocks if r.get('signal_52w_high') == 1]
+        near_52w_low = [r for r in all_stocks if r.get('signal_52w_low') == 1]
+        volume_spike = [r for r in all_stocks if r.get('signal_volume_spike') == 1]
+        golden_cross = [r for r in all_stocks if r.get('signal_golden_cross') == 1]
+        
+        # News sentiment
+        positive_news = sorted(
+            [r for r in all_stocks if r.get('news_sentiment_label') == 'positive'],
+            key=lambda x: x.get('news_sentiment_combined', 0) or 0,
+            reverse=True
+        )
+        negative_news = sorted(
+            [r for r in all_stocks if r.get('news_sentiment_label') == 'negative'],
+            key=lambda x: x.get('news_sentiment_combined', 0) or 0
+        )
+        
+        # Benchmark data (from first stock that has it)
+        ibov_ytd = None
+        sp500_ytd = None
+        for r in rows:
+            if r.get("ibov_change_ytd") and ibov_ytd is None:
+                ibov_ytd = r["ibov_change_ytd"]
+            if r.get("sp500_change_ytd") and sp500_ytd is None:
+                sp500_ytd = r["sp500_change_ytd"]
+            if ibov_ytd and sp500_ytd:
+                break
+        
+        # USD/BRL (from currency or calculate from stocks)
+        usd_brl = None
+        for r in rows:
+            if r["tipo"] == "currency":
+                usd_brl = r["preco_brl"]
+                break
+        
+        return {
+            "generated_at": datetime.now(),
+            "total_assets": len(rows),
+            "counts": {
+                "brazil_stocks": len(br_stocks),
+                "us_stocks": len(us_stocks),
+                "commodities": len(commodities),
+                "crypto": len(crypto),
+            },
+            "market_context": {
+                "ibov_ytd": ibov_ytd,
+                "sp500_ytd": sp500_ytd,
+                "usd_brl": usd_brl,
+            },
+            "top_movers": {
+                "gainers": top_gainers,
+                "losers": top_losers,
+            },
+            "signals": {
+                "bullish": bullish,
+                "bearish": bearish,
+                "oversold": oversold,
+                "overbought": overbought,
+                "near_52w_high": near_52w_high,
+                "near_52w_low": near_52w_low,
+                "volume_spike": volume_spike,
+                "golden_cross": golden_cross,
+            },
+            "news_sentiment": {
+                "positive": positive_news,
+                "negative": negative_news,
+            },
+            "all_data": rows,
+        }
+        
+    finally:
+        db.close()
+
+
+def export_human_report(filename: Optional[str] = None) -> str:
+    """
+    Exporta relatório em Markdown para leitura humana.
+    """
+    data = generate_report_data()
+    
+    if not data:
+        print("⚠️ Nenhum dado para gerar relatório")
+        return None
+    
+    if not filename:
+        filename = f"report_{datetime.now().strftime('%Y-%m-%d')}.md"
+    
+    filepath = os.path.join(EXPORTS_PATH, filename)
+    os.makedirs(EXPORTS_PATH, exist_ok=True)
+    
+    lines = []
+    
+    # Header
+    lines.append(f"# 📈 B3 Tracker Report - {data['generated_at'].strftime('%Y-%m-%d %H:%M')}")
+    lines.append("")
+    
+    # Market Summary
+    lines.append("## 📊 Market Summary")
+    lines.append("")
+    lines.append(f"- **Total de ativos**: {data['total_assets']}")
+    lines.append(f"  - 🇧🇷 Brasil: {data['counts']['brazil_stocks']}")
+    lines.append(f"  - 🇺🇸 EUA: {data['counts']['us_stocks']}")
+    lines.append(f"  - 🥇 Commodities: {data['counts']['commodities']}")
+    lines.append(f"  - ₿ Crypto: {data['counts']['crypto']}")
+    lines.append("")
+    
+    ctx = data['market_context']
+    if ctx['ibov_ytd'] or ctx['sp500_ytd']:
+        lines.append("### Benchmarks YTD")
+        if ctx['ibov_ytd']:
+            lines.append(f"- **IBOV**: {ctx['ibov_ytd']:+.1f}%")
+        if ctx['sp500_ytd']:
+            lines.append(f"- **S&P 500**: {ctx['sp500_ytd']:+.1f}%")
+        if ctx['usd_brl']:
+            lines.append(f"- **USD/BRL**: R$ {ctx['usd_brl']:.2f}")
+        lines.append("")
+    
+    # Top Movers
+    lines.append("## 🔥 Top Movers (1D)")
+    lines.append("")
+    
+    lines.append("### 📈 Maiores Altas")
+    lines.append("| Ticker | Nome | Variação 1D |")
+    lines.append("|--------|------|-------------|")
+    for r in data['top_movers']['gainers'][:5]:
+        lines.append(f"| {r['ticker']} | {r['nome'][:20]} | {r['var_1d']:+.2f}% |")
+    lines.append("")
+    
+    lines.append("### 📉 Maiores Quedas")
+    lines.append("| Ticker | Nome | Variação 1D |")
+    lines.append("|--------|------|-------------|")
+    for r in data['top_movers']['losers'][:5]:
+        lines.append(f"| {r['ticker']} | {r['nome'][:20]} | {r['var_1d']:+.2f}% |")
+    lines.append("")
+    
+    # Trading Signals
+    lines.append("## 🚦 Trading Signals")
+    lines.append("")
+    
+    signals = data['signals']
+    
+    if signals['bullish']:
+        lines.append(f"### 📈 Bullish ({len(signals['bullish'])} stocks)")
+        tickers = ", ".join([r['ticker'] for r in signals['bullish'][:15]])
+        lines.append(f"{tickers}")
+        lines.append("")
+    
+    if signals['bearish']:
+        lines.append(f"### 📉 Bearish ({len(signals['bearish'])} stocks)")
+        tickers = ", ".join([r['ticker'] for r in signals['bearish'][:15]])
+        lines.append(f"{tickers}")
+        lines.append("")
+    
+    if signals['oversold']:
+        lines.append(f"### 🟢 RSI Oversold (<30) - Potencial compra")
+        for r in signals['oversold'][:5]:
+            lines.append(f"- **{r['ticker']}** ({r['nome'][:20]}) - RSI: {r['rsi_14']:.0f}")
+        lines.append("")
+    
+    if signals['overbought']:
+        lines.append(f"### 🔴 RSI Overbought (>70) - Potencial venda")
+        for r in signals['overbought'][:5]:
+            lines.append(f"- **{r['ticker']}** ({r['nome'][:20]}) - RSI: {r['rsi_14']:.0f}")
+        lines.append("")
+    
+    if signals['near_52w_high']:
+        lines.append(f"### ⬆️ Próximo da Máxima 52 semanas ({len(signals['near_52w_high'])} stocks)")
+        tickers = ", ".join([r['ticker'] for r in signals['near_52w_high'][:10]])
+        lines.append(f"{tickers}")
+        lines.append("")
+    
+    if signals['near_52w_low']:
+        lines.append(f"### ⬇️ Próximo da Mínima 52 semanas ({len(signals['near_52w_low'])} stocks)")
+        tickers = ", ".join([r['ticker'] for r in signals['near_52w_low'][:10]])
+        lines.append(f"{tickers}")
+        lines.append("")
+    
+    # News Sentiment
+    lines.append("## 📰 News Sentiment")
+    lines.append("")
+    
+    news = data['news_sentiment']
+    
+    if news['positive']:
+        lines.append(f"### 🟢 Sentimento Positivo ({len(news['positive'])} stocks)")
+        for r in news['positive'][:5]:
+            score = r.get('news_sentiment_combined', 0) or 0
+            headline = r.get('news_headline_pt') or r.get('news_headline_en', '')
+            headline = headline[:60] + "..." if len(headline) > 60 else headline
+            lines.append(f"- **{r['ticker']}** (score: {score:+.2f})")
+            if headline:
+                lines.append(f"  - *\"{headline}\"*")
+        lines.append("")
+    
+    if news['negative']:
+        lines.append(f"### 🔴 Sentimento Negativo ({len(news['negative'])} stocks)")
+        for r in news['negative'][:5]:
+            score = r.get('news_sentiment_combined', 0) or 0
+            headline = r.get('news_headline_pt') or r.get('news_headline_en', '')
+            headline = headline[:60] + "..." if len(headline) > 60 else headline
+            lines.append(f"- **{r['ticker']}** (score: {score:+.2f})")
+            if headline:
+                lines.append(f"  - *\"{headline}\"*")
+        lines.append("")
+    
+    # Footer
+    lines.append("---")
+    lines.append(f"*Gerado em {data['generated_at'].strftime('%Y-%m-%d %H:%M:%S')} por B3 Tracker*")
+    
+    # Write file
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write("\n".join(lines))
+    
+    print(f"✅ Relatório Human exportado: {filepath}")
+    return filepath
+
+
+def export_ai_report(filename: Optional[str] = None) -> str:
+    """
+    Exporta relatório JSON estruturado para consumo por AI/LLM.
+    """
+    data = generate_report_data()
+    
+    if not data:
+        print("⚠️ Nenhum dado para gerar relatório")
+        return None
+    
+    if not filename:
+        filename = f"ai_report_{datetime.now().strftime('%Y-%m-%d')}.json"
+    
+    filepath = os.path.join(EXPORTS_PATH, filename)
+    os.makedirs(EXPORTS_PATH, exist_ok=True)
+    
+    # Build AI-optimized structure
+    def extract_ticker_info(items, fields=None):
+        """Extract minimal info for AI consumption"""
+        if fields is None:
+            fields = ['ticker', 'nome', 'var_1d', 'var_ytd', 'rsi_14', 'signal_summary']
+        return [{k: r.get(k) for k in fields if k in r} for r in items]
+    
+    report = {
+        "metadata": {
+            "report_type": "daily_market_summary",
+            "generated_at": data['generated_at'].isoformat(),
+            "total_assets": data['total_assets'],
+            "version": "1.0",
+        },
+        "market_context": {
+            "ibov_ytd_pct": data['market_context']['ibov_ytd'],
+            "sp500_ytd_pct": data['market_context']['sp500_ytd'],
+            "usd_brl": data['market_context']['usd_brl'],
+            "asset_counts": data['counts'],
+        },
+        "signals_summary": {
+            "bullish_count": len(data['signals']['bullish']),
+            "bearish_count": len(data['signals']['bearish']),
+            "bullish_tickers": [r['ticker'] for r in data['signals']['bullish']],
+            "bearish_tickers": [r['ticker'] for r in data['signals']['bearish']],
+            "rsi_oversold": [{"ticker": r['ticker'], "rsi": r['rsi_14']} for r in data['signals']['oversold']],
+            "rsi_overbought": [{"ticker": r['ticker'], "rsi": r['rsi_14']} for r in data['signals']['overbought']],
+            "near_52w_high": [r['ticker'] for r in data['signals']['near_52w_high']],
+            "near_52w_low": [r['ticker'] for r in data['signals']['near_52w_low']],
+            "volume_spike": [r['ticker'] for r in data['signals']['volume_spike']],
+            "golden_cross_count": len(data['signals']['golden_cross']),
+        },
+        "top_movers": {
+            "gainers_1d": [
+                {"ticker": r['ticker'], "name": r['nome'], "change_1d": r['var_1d']}
+                for r in data['top_movers']['gainers'][:10]
+            ],
+            "losers_1d": [
+                {"ticker": r['ticker'], "name": r['nome'], "change_1d": r['var_1d']}
+                for r in data['top_movers']['losers'][:10]
+            ],
+        },
+        "news_sentiment": {
+            "positive_count": len(data['news_sentiment']['positive']),
+            "negative_count": len(data['news_sentiment']['negative']),
+            "positive": [
+                {
+                    "ticker": r['ticker'],
+                    "score": r.get('news_sentiment_combined'),
+                    "headline": (r.get('news_headline_pt') or r.get('news_headline_en', ''))[:100]
+                }
+                for r in data['news_sentiment']['positive'][:10]
+            ],
+            "negative": [
+                {
+                    "ticker": r['ticker'],
+                    "score": r.get('news_sentiment_combined'),
+                    "headline": (r.get('news_headline_pt') or r.get('news_headline_en', ''))[:100]
+                }
+                for r in data['news_sentiment']['negative'][:10]
+            ],
+        },
+        "actionable_insights": {
+            "potential_buys": [
+                r['ticker'] for r in data['signals']['oversold']
+            ] + [
+                r['ticker'] for r in data['signals']['near_52w_low']
+            ],
+            "potential_sells": [
+                r['ticker'] for r in data['signals']['overbought']
+            ],
+            "momentum_stocks": [
+                r['ticker'] for r in data['signals']['bullish'] 
+                if r.get('var_ytd', 0) and r['var_ytd'] > 20
+            ][:10],
+        },
+        "full_data": data['all_data'],
+    }
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(report, f, ensure_ascii=False, indent=2, default=str)
+    
+    print(f"✅ Relatório AI exportado: {filepath}")
+    return filepath
+
+
+def generate_reports() -> tuple:
+    """
+    Gera ambos os relatórios (Human e AI).
+    Retorna tupla com os caminhos dos arquivos.
+    """
+    human_path = export_human_report()
+    ai_path = export_ai_report()
+    return human_path, ai_path
+
+
 if __name__ == "__main__":
     from database import init_db
     init_db()

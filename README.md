@@ -52,6 +52,28 @@ docker compose down
 | `python src/main.py --signals` | Mostra sinais de trading detectados |
 | `python src/main.py --news` | Mostra análise de sentimento de notícias |
 | `python src/main.py --ai` | Mostra análise AI + sinais + news |
+| `python src/main.py --report` | Gera relatórios Human (MD) + AI (JSON) |
+
+## 📄 Relatórios Consolidados
+
+O comando `--report` gera dois relatórios complementares:
+
+### Human Report (Markdown)
+Arquivo `exports/report_YYYY-MM-DD.md` com:
+- 📊 **Market Summary** - Totais, benchmarks YTD (IBOV, S&P 500, USD/BRL)
+- 🔥 **Top Movers** - Maiores altas/quedas do dia
+- 🚦 **Trading Signals** - RSI oversold/overbought, máximas/mínimas 52w
+- 📰 **News Sentiment** - Notícias positivas/negativas recentes
+
+### AI Report (JSON)
+Arquivo `exports/ai_report_YYYY-MM-DD.json` com:
+- `metadata` - Tipo, timestamp, versão
+- `market_context` - IBOV YTD, S&P 500 YTD, USD/BRL
+- `signals_summary` - Bullish/bearish counts, RSI extremos
+- `top_movers` - Gainers/losers com dados completos
+- `news_sentiment` - Scores e headlines
+- `actionable_insights` - Listas de potential_buys, potential_sells, momentum_stocks
+- `full_data` - Dados completos de todos os 104 ativos
 
 ## 📁 Estrutura do Projeto
 
@@ -73,7 +95,9 @@ b3_tracker/
 └── exports/              # Arquivos exportados
     ├── cotacoes_YYYY-MM-DD.csv
     ├── cotacoes_YYYY-MM-DD.json
-    └── ai_analysis_YYYY-MM-DD.json
+    ├── ai_analysis_YYYY-MM-DD.json
+    ├── report_YYYY-MM-DD.md        # 📄 Human report
+    └── ai_report_YYYY-MM-DD.json   # 🤖 AI report
 ```
 
 ## 💾 Ativos Rastreados
