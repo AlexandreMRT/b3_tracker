@@ -6,6 +6,8 @@ from datetime import datetime, date, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 from assets import get_all_assets, IBOVESPA_STOCKS, COMMODITIES, CRYPTO, CURRENCY, US_STOCKS
 from models import Asset, Quote
@@ -853,126 +855,224 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
     db.commit()
 
 
-def fetch_all_quotes():
-    """Busca e salva cotações de todos os ativos"""
-    db = SessionLocal()
+def fetch_single_asset(ticker: str, info: dict, asset_type: str, is_brazilian: bool, 
+                       usd_brl: float, benchmarks: dict) -> Optional[dict]:
+    """
+    Fetch a single asset's quote, news, and prepare data for saving.
+    This function is designed to be called in parallel.
     
+    Returns:
+        dict with all data needed for saving, or None if fetch failed
+    """
     try:
-        print("\n" + "="*60)
-        print(f"🚀 Iniciando busca de cotações - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("="*60 + "\n")
+        quote_data = fetch_quote_with_history(ticker)
+        if not quote_data:
+            return None
         
-        # Obter cotação do dólar para conversão
-        usd_brl = get_usd_brl_rate()
-        print(f"💵 Cotação USD/BRL: R$ {usd_brl:.4f}\n")
+        # Add benchmark comparison
+        benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
+        quote_data.update(benchmark_comparison)
         
-        # Fetch benchmark data once (Ibovespa and S&P 500)
-        benchmarks = fetch_benchmark_data()
+        # Calculate prices based on asset type
+        if asset_type == "stock":
+            # Brazilian stock: price is in BRL
+            price_brl = quote_data["close"]
+            price_usd = price_brl / usd_brl
+        elif asset_type == "currency":
+            # Currency: price is in BRL, USD is always 1
+            price_brl = quote_data["close"]
+            price_usd = 1.0
+        else:
+            # US stock, commodity, crypto: price is in USD
+            price_usd = quote_data["close"]
+            price_brl = price_usd * usd_brl
         
-        success_count = 0
-        error_count = 0
-        
-        # Buscar ações brasileiras (preço nativo em BRL, calcular USD)
-        print("\n📈 Buscando ações do Ibovespa...")
-        for ticker, info in IBOVESPA_STOCKS.items():
-            quote_data = fetch_quote_with_history(ticker)
-            if quote_data:
-                # Add benchmark comparison
-                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
-                quote_data.update(benchmark_comparison)
-                
-                # Add news sentiment (Brazilian stocks get both PT and EN)
-                news_data = fetch_news_sentiment(ticker, info.get("name", ""), is_brazilian=True)
-                quote_data.update(news_data)
-                
-                price_brl = quote_data["close"]
-                price_usd = price_brl / usd_brl  # Converter BRL para USD
-                asset = get_or_create_asset(db, ticker, info, "stock")
-                save_quote(db, asset, quote_data, price_brl, price_usd)
-                success_count += 1
-            else:
-                error_count += 1
-        
-        # Buscar ações americanas (preço nativo em USD, calcular BRL)
-        print("\n🇺🇸 Buscando ações americanas...")
-        for ticker, info in US_STOCKS.items():
-            quote_data = fetch_quote_with_history(ticker)
-            if quote_data:
-                # Add benchmark comparison
-                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
-                quote_data.update(benchmark_comparison)
-                
-                # Add news sentiment (US stocks get only EN)
-                news_data = fetch_news_sentiment(ticker, info.get("name", ""), is_brazilian=False)
-                quote_data.update(news_data)
-                
-                price_usd = quote_data["close"]
-                price_brl = price_usd * usd_brl  # Converter USD para BRL
-                asset = get_or_create_asset(db, ticker, info, "us_stock")
-                save_quote(db, asset, quote_data, price_brl, price_usd)
-                success_count += 1
-            else:
-                error_count += 1
-        
-        # Buscar commodities (converter USD para BRL)
-        print("\n🥇 Buscando commodities...")
-        for ticker, info in COMMODITIES.items():
-            quote_data = fetch_quote_with_history(ticker)
-            if quote_data:
-                # Add benchmark comparison
-                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
-                quote_data.update(benchmark_comparison)
-                
-                price_usd = quote_data["close"]
-                price_brl = price_usd * usd_brl
-                asset = get_or_create_asset(db, ticker, info, "commodity")
-                save_quote(db, asset, quote_data, price_brl, price_usd)
-                success_count += 1
-            else:
-                error_count += 1
-        
-        # Buscar criptomoedas (converter USD para BRL)
-        print("\n₿ Buscando criptomoedas...")
-        for ticker, info in CRYPTO.items():
-            quote_data = fetch_quote_with_history(ticker)
-            if quote_data:
-                # Add benchmark comparison
-                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
-                quote_data.update(benchmark_comparison)
-                
-                price_usd = quote_data["close"]
-                price_brl = price_usd * usd_brl
-                asset = get_or_create_asset(db, ticker, info, "crypto")
-                save_quote(db, asset, quote_data, price_brl, price_usd)
-                success_count += 1
-            else:
-                error_count += 1
-        
-        # Salvar cotação do dólar
-        print("\n💱 Salvando cotação do dólar...")
-        for ticker, info in CURRENCY.items():
-            quote_data = fetch_quote_with_history(ticker)
-            if quote_data:
-                # Add benchmark comparison
-                benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
-                quote_data.update(benchmark_comparison)
-                
-                asset = get_or_create_asset(db, ticker, info, "currency")
-                # Dólar: preço já é em BRL, USD é sempre 1
-                save_quote(db, asset, quote_data, quote_data["close"], 1.0)
-                success_count += 1
-        
-        print("\n" + "="*60)
-        print(f"✅ Concluído! Sucesso: {success_count} | Erros: {error_count}")
-        print("="*60 + "\n")
-        
-        return success_count, error_count
-        
+        return {
+            "ticker": ticker,
+            "info": info,
+            "asset_type": asset_type,
+            "is_brazilian": is_brazilian,
+            "quote_data": quote_data,
+            "price_brl": price_brl,
+            "price_usd": price_usd,
+        }
     except Exception as e:
-        print(f"❌ Erro geral: {e}")
-        raise
+        print(f"    ❌ Error fetching {ticker}: {e}")
+        return None
+
+
+def fetch_news_for_asset(result: dict) -> dict:
+    """
+    Fetch news sentiment for a single asset.
+    This function is designed to be called in parallel.
+    """
+    if result is None:
+        return result
+    
+    asset_type = result["asset_type"]
+    
+    # Only fetch news for stocks
+    if asset_type in ("stock", "us_stock"):
+        ticker = result["ticker"]
+        info = result["info"]
+        is_brazilian = result["is_brazilian"]
+        
+        news_data = fetch_news_sentiment(ticker, info.get("name", ""), is_brazilian=is_brazilian)
+        result["quote_data"].update(news_data)
+    
+    return result
+
+
+def fetch_all_quotes():
+    """Busca e salva cotações de todos os ativos (versão paralela)"""
+    
+    total_start = time.time()
+    
+    print("\n" + "="*60)
+    print(f"🚀 Iniciando busca de cotações - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("="*60 + "\n")
+    
+    # =========================================================================
+    # FASE 1: Prerequisites (paralelo)
+    # =========================================================================
+    phase1_start = time.time()
+    print("📊 Fase 1: Buscando dados de referência...")
+    
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        usd_future = executor.submit(get_usd_brl_rate)
+        bench_future = executor.submit(fetch_benchmark_data)
+        
+        usd_brl = usd_future.result()
+        benchmarks = bench_future.result()
+    
+    print(f"   💵 USD/BRL: R$ {usd_brl:.4f}")
+    print(f"   ⏱️  Fase 1 concluída em {time.time() - phase1_start:.1f}s\n")
+    
+    # =========================================================================
+    # FASE 2: Prepare all assets
+    # =========================================================================
+    all_assets = []
+    
+    # Brazilian stocks
+    for ticker, info in IBOVESPA_STOCKS.items():
+        all_assets.append((ticker, info, "stock", True))
+    
+    # US stocks
+    for ticker, info in US_STOCKS.items():
+        all_assets.append((ticker, info, "us_stock", False))
+    
+    # Commodities
+    for ticker, info in COMMODITIES.items():
+        all_assets.append((ticker, info, "commodity", False))
+    
+    # Crypto
+    for ticker, info in CRYPTO.items():
+        all_assets.append((ticker, info, "crypto", False))
+    
+    # Currency
+    for ticker, info in CURRENCY.items():
+        all_assets.append((ticker, info, "currency", False))
+    
+    total_assets = len(all_assets)
+    print(f"📈 Total de ativos para buscar: {total_assets}")
+    
+    # =========================================================================
+    # FASE 2: Fetch all quotes in parallel
+    # =========================================================================
+    phase2_start = time.time()
+    print(f"\n📊 Fase 2: Buscando cotações (8 workers paralelos)...")
+    
+    results = []
+    success_count = 0
+    error_count = 0
+    
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {
+            executor.submit(fetch_single_asset, ticker, info, asset_type, is_br, usd_brl, benchmarks): ticker
+            for ticker, info, asset_type, is_br in all_assets
+        }
+        
+        for future in as_completed(futures):
+            ticker = futures[future]
+            try:
+                result = future.result()
+                if result:
+                    results.append(result)
+                    success_count += 1
+                else:
+                    error_count += 1
+            except Exception as e:
+                print(f"    ❌ Error processing {ticker}: {e}")
+                error_count += 1
+    
+    print(f"   ✅ Cotações: {success_count} sucesso, {error_count} erros")
+    print(f"   ⏱️  Fase 2 concluída em {time.time() - phase2_start:.1f}s\n")
+    
+    # =========================================================================
+    # FASE 3: Fetch news in parallel (only for stocks)
+    # =========================================================================
+    phase3_start = time.time()
+    stocks_only = [r for r in results if r["asset_type"] in ("stock", "us_stock")]
+    print(f"📰 Fase 3: Buscando notícias para {len(stocks_only)} ações (5 workers)...")
+    
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(fetch_news_for_asset, r): r["ticker"] for r in stocks_only}
+        
+        for future in as_completed(futures):
+            try:
+                future.result()  # Just ensure it completes
+            except Exception as e:
+                ticker = futures[future]
+                print(f"    ⚠️ News error for {ticker}: {e}")
+    
+    print(f"   ⏱️  Fase 3 concluída em {time.time() - phase3_start:.1f}s\n")
+    
+    # =========================================================================
+    # FASE 4: Save all to database (sequential - SQLite safe)
+    # =========================================================================
+    phase4_start = time.time()
+    print(f"💾 Fase 4: Salvando {len(results)} registros no banco...")
+    
+    db = SessionLocal()
+    try:
+        saved_count = 0
+        for result in results:
+            try:
+                asset = get_or_create_asset(
+                    db, 
+                    result["ticker"], 
+                    result["info"], 
+                    result["asset_type"]
+                )
+                save_quote(
+                    db, 
+                    asset, 
+                    result["quote_data"], 
+                    result["price_brl"], 
+                    result["price_usd"]
+                )
+                saved_count += 1
+            except Exception as e:
+                print(f"    ❌ Error saving {result['ticker']}: {e}")
+        
+        print(f"   ✅ Salvos: {saved_count} registros")
+        print(f"   ⏱️  Fase 4 concluída em {time.time() - phase4_start:.1f}s\n")
+        
     finally:
         db.close()
+    
+    # =========================================================================
+    # SUMMARY
+    # =========================================================================
+    total_time = time.time() - total_start
+    print("="*60)
+    print(f"✅ CONCLUÍDO!")
+    print(f"   📊 Ativos processados: {success_count}/{total_assets}")
+    print(f"   ⏱️  Tempo total: {total_time:.1f}s ({total_time/60:.1f} min)")
+    print(f"   🚀 Velocidade: {total_assets/total_time:.1f} ativos/segundo")
+    print("="*60 + "\n")
+    
+    return success_count, error_count
 
 
 if __name__ == "__main__":

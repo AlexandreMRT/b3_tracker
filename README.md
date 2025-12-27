@@ -4,7 +4,8 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 
 ## ✨ Recursos
 
-- 📊 **97+ ativos rastreados** (Ibovespa, S&P 500, commodities, crypto)
+- 📊 **104 ativos rastreados** (Ibovespa, S&P 500, commodities, crypto)
+- ⚡ **Fetch paralelo** - 8 workers simultâneos (~30s para 104 ativos)
 - 💱 **Dual currency** - Preços em BRL e USD para todos os ativos
 - 📈 **Comparações históricas** - 1D, 1W, 1M, YTD, 5Y, ALL
 - 🎯 **Benchmark comparison** - Performance vs IBOV e S&P 500
@@ -350,6 +351,27 @@ docker compose run --rm runner python src/main.py --export --json
 ## 📝 Licença
 
 MIT
+
+---
+
+## ⚡ Performance
+
+O sistema utiliza **processamento paralelo** para buscar dados de forma eficiente:
+
+| Fase | Workers | Tempo | Descrição |
+|------|---------|-------|-----------|
+| Fase 1 | 3 | ~1.5s | Benchmarks (USD/BRL, IBOV, S&P500) |
+| Fase 2 | 8 | ~18s | Cotações de 104 ativos |
+| Fase 3 | 5 | ~9s | Notícias de 97 ações |
+| Fase 4 | 1 | ~0.5s | Save to DB (sequencial) |
+| **Total** | - | **~30s** | **3.6 ativos/segundo** |
+
+### Comparativo
+
+| Modo | Tempo | Speedup |
+|------|-------|---------|
+| Sequencial (antigo) | 4:01 (241s) | 1x |
+| **Paralelo (atual)** | **0:30 (30s)** | **8x** |
 
 ---
 
