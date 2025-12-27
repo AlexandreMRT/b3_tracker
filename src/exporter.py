@@ -103,6 +103,30 @@ def format_quote_row(quote: Quote) -> dict:
         "analyst_rating": quote.analyst_rating,
         "target_price": round(quote.target_price, 2) if quote.target_price else None,
         "num_analysts": quote.num_analysts,
+        # Benchmark comparison
+        "ibov_change_1d": round(quote.ibov_change_1d, 2) if quote.ibov_change_1d else None,
+        "ibov_change_ytd": round(quote.ibov_change_ytd, 2) if quote.ibov_change_ytd else None,
+        "sp500_change_1d": round(quote.sp500_change_1d, 2) if quote.sp500_change_1d else None,
+        "sp500_change_ytd": round(quote.sp500_change_ytd, 2) if quote.sp500_change_ytd else None,
+        "vs_ibov_1d": round(quote.vs_ibov_1d, 2) if quote.vs_ibov_1d else None,
+        "vs_ibov_1m": round(quote.vs_ibov_1m, 2) if quote.vs_ibov_1m else None,
+        "vs_ibov_ytd": round(quote.vs_ibov_ytd, 2) if quote.vs_ibov_ytd else None,
+        "vs_sp500_1d": round(quote.vs_sp500_1d, 2) if quote.vs_sp500_1d else None,
+        "vs_sp500_1m": round(quote.vs_sp500_1m, 2) if quote.vs_sp500_1m else None,
+        "vs_sp500_ytd": round(quote.vs_sp500_ytd, 2) if quote.vs_sp500_ytd else None,
+        # Trading signals
+        "signal_golden_cross": quote.signal_golden_cross,
+        "signal_death_cross": quote.signal_death_cross,
+        "signal_rsi_oversold": quote.signal_rsi_oversold,
+        "signal_rsi_overbought": quote.signal_rsi_overbought,
+        "signal_52w_high": quote.signal_52w_high,
+        "signal_52w_low": quote.signal_52w_low,
+        "signal_volume_spike": quote.signal_volume_spike,
+        "signal_summary": quote.signal_summary,
+        # Volatility
+        "volatility_30d": round(quote.volatility_30d, 2) if quote.volatility_30d else None,
+        "avg_volume_20d": quote.avg_volume_20d,
+        "volume_ratio": round(quote.volume_ratio, 2) if quote.volume_ratio else None,
         "data_cotacao": quote.quote_date.strftime("%Y-%m-%d"),
         "atualizado_em": quote.fetched_at.strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -316,11 +340,20 @@ def print_ai_analysis():
             color = "\033[92m" if (val >= 0) != invert else "\033[91m"
             return f"{color}{val:>+7.1f}%\033[0m"
         
-        print(f"\n{'='*160}")
+        def format_signal(summary):
+            if not summary:
+                return "  N/A  "
+            colors = {"bullish": "\033[92m", "bearish": "\033[91m", "neutral": "\033[93m"}
+            emoji = {"bullish": "📈", "bearish": "📉", "neutral": "➖"}
+            color = colors.get(summary, "")
+            icon = emoji.get(summary, "")
+            return f"{color}{icon}{summary[:4]:>4}\033[0m"
+        
+        print(f"\n{'='*180}")
         print("  🤖 AI INVESTMENT ANALYSIS - FUNDAMENTAL & TECHNICAL DATA")
-        print(f"{'='*160}")
-        print(f"{'TICKER':<8} {'NOME':<16} {'P/E':>7} {'P/B':>6} {'DIV%':>6} {'BETA':>5} {'RSI':>5} {'vs52H':>8} {'MA50':>5} {'MA200':>5} {'RATING':>8} {'TARGET':>10} {'MARGIN':>7} {'ROE':>7}")
-        print("-"*160)
+        print(f"{'='*180}")
+        print(f"{'TICKER':<8} {'NOME':<16} {'P/E':>7} {'BETA':>5} {'RSI':>5} {'vs52H':>8} {'vsIBOV':>8} {'vsSP500':>8} {'SIGNAL':>8} {'MA50':>5} {'MA200':>5} {'RATING':>8} {'VOL30D':>7}")
+        print("-"*180)
         
         # Only show stocks (not commodities/crypto)
         stocks = [r for r in rows if r["tipo"] in ("stock", "us_stock")]
@@ -334,23 +367,101 @@ def print_ai_analysis():
                 print(f"\n{'='*40} {label} {'='*40}")
             
             pe = f"{row['pe_ratio']:>7.1f}" if row['pe_ratio'] else "    N/A"
-            pb = f"{row['pb_ratio']:>6.2f}" if row['pb_ratio'] else "   N/A"
-            div = f"{row['dividend_yield']:>5.1f}%" if row['dividend_yield'] else "   N/A"
             beta = f"{row['beta']:>5.2f}" if row['beta'] else "  N/A"
             ma50 = "  ✓" if row['above_ma_50'] == 1 else ("  ✗" if row['above_ma_50'] == 0 else " N/A")
             ma200 = "  ✓" if row['above_ma_200'] == 1 else ("  ✗" if row['above_ma_200'] == 0 else " N/A")
-            target = f"{row['target_price']:>10.2f}" if row['target_price'] else "       N/A"
-            margin = f"{row['profit_margin']:>6.1f}%" if row['profit_margin'] else "    N/A"
-            roe = f"{row['roe']:>6.1f}%" if row['roe'] else "    N/A"
+            vol30d = f"{row['volatility_30d']:>6.2f}%" if row['volatility_30d'] else "    N/A"
             
-            print(f"{row['ticker']:<8} {row['nome'][:15]:<16} {pe} {pb} {div} {beta} "
+            # Use vs_ibov_ytd for Brazil, vs_sp500_ytd for US
+            if row["tipo"] == "stock":
+                vs_bench = format_pct(row['vs_ibov_ytd'])
+            else:
+                vs_bench = format_pct(row['vs_sp500_ytd'])
+            
+            print(f"{row['ticker']:<8} {row['nome'][:15]:<16} {pe} {beta} "
                   f"{format_rsi(row['rsi_14'])} {format_pct(row['pct_from_52w_high'], invert=True)} "
-                  f"{ma50} {ma200} {format_rating(row['analyst_rating'])} {target} {margin} {roe}")
+                  f"{format_pct(row['vs_ibov_ytd'])} {format_pct(row['vs_sp500_ytd'])} "
+                  f"{format_signal(row['signal_summary'])} {ma50} {ma200} {format_rating(row['analyst_rating'])} {vol30d}")
         
-        print(f"\n{'='*160}")
-        print("Legend: P/E = Price/Earnings | P/B = Price/Book | DIV% = Dividend Yield | RSI = 14-day RSI (>70 overbought, <30 oversold)")
-        print("        vs52H = % from 52-week high | MA50/MA200 = Price above Moving Average | MARGIN = Profit Margin | ROE = Return on Equity")
-        print("="*160 + "\n")
+        print(f"\n{'='*180}")
+        print("Legend: vsIBOV/vsSP500 = YTD outperformance vs benchmark | SIGNAL = AI-detected signal (bullish/bearish/neutral)")
+        print("        VOL30D = 30-day volatility | RSI = 14-day RSI (>70 overbought, <30 oversold) | vs52H = % from 52-week high")
+        print("="*180 + "\n")
+        
+    finally:
+        db.close()
+
+
+def print_signals():
+    """Imprime sinais de trading detectados"""
+    db = SessionLocal()
+    
+    try:
+        quotes = get_latest_quotes(db)
+        
+        if not quotes:
+            print("⚠️ Nenhuma cotação encontrada")
+            return
+        
+        rows = [format_quote_row(q) for q in quotes]
+        stocks = [r for r in rows if r["tipo"] in ("stock", "us_stock")]
+        
+        # Filter by signals
+        bullish = [r for r in stocks if r.get('signal_summary') == 'bullish']
+        bearish = [r for r in stocks if r.get('signal_summary') == 'bearish']
+        oversold = [r for r in stocks if r.get('signal_rsi_oversold') == 1]
+        overbought = [r for r in stocks if r.get('signal_rsi_overbought') == 1]
+        at_52w_low = [r for r in stocks if r.get('signal_52w_low') == 1]
+        at_52w_high = [r for r in stocks if r.get('signal_52w_high') == 1]
+        volume_spike = [r for r in stocks if r.get('signal_volume_spike') == 1]
+        golden_cross = [r for r in stocks if r.get('signal_golden_cross') == 1]
+        
+        print(f"\n{'='*80}")
+        print("  🚦 TRADING SIGNALS DETECTED")
+        print(f"{'='*80}")
+        
+        if bullish:
+            print(f"\n📈 BULLISH SIGNALS ({len(bullish)} stocks):")
+            for r in bullish[:10]:
+                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {r.get('var_ytd', 0):>+6.1f}%")
+        
+        if bearish:
+            print(f"\n📉 BEARISH SIGNALS ({len(bearish)} stocks):")
+            for r in bearish[:10]:
+                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {r.get('var_ytd', 0):>+6.1f}%")
+        
+        if oversold:
+            print(f"\n🟢 RSI OVERSOLD (<30) - Potential buy ({len(oversold)} stocks):")
+            for r in oversold:
+                print(f"   {r['ticker']:<8} RSI: {r.get('rsi_14', 0):>5.0f}")
+        
+        if overbought:
+            print(f"\n🔴 RSI OVERBOUGHT (>70) - Potential sell ({len(overbought)} stocks):")
+            for r in overbought:
+                print(f"   {r['ticker']:<8} RSI: {r.get('rsi_14', 0):>5.0f}")
+        
+        if at_52w_low:
+            print(f"\n⬇️ NEAR 52-WEEK LOW (within 5%) ({len(at_52w_low)} stocks):")
+            for r in at_52w_low:
+                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20}")
+        
+        if at_52w_high:
+            print(f"\n⬆️ NEAR 52-WEEK HIGH (within 5%) ({len(at_52w_high)} stocks):")
+            for r in at_52w_high:
+                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20}")
+        
+        if volume_spike:
+            print(f"\n📊 VOLUME SPIKE (>2x average) ({len(volume_spike)} stocks):")
+            for r in volume_spike:
+                ratio = r.get('volume_ratio', 0)
+                print(f"   {r['ticker']:<8} Volume: {ratio:>4.1f}x average")
+        
+        if golden_cross:
+            print(f"\n✨ GOLDEN CROSS (MA50 > MA200) ({len(golden_cross)} stocks):")
+            for r in golden_cross[:10]:
+                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20}")
+        
+        print(f"\n{'='*80}\n")
         
     finally:
         db.close()
@@ -414,3 +525,4 @@ if __name__ == "__main__":
     export_ai_json()
     print_summary()
     print_ai_analysis()
+    print_signals()

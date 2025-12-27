@@ -7,6 +7,8 @@ Uso:
     python main.py --once       # Busca cotações uma vez e sai
     python main.py --export     # Apenas exporta dados existentes
     python main.py --summary    # Mostra resumo das cotações
+    python main.py --signals    # Mostra sinais de trading detectados
+    python main.py --ai         # Análise detalhada para AI com sinais
 """
 import sys
 import os
@@ -16,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import init_db
 from fetcher import fetch_all_quotes
-from exporter import export_to_csv, export_to_json, print_summary
+from exporter import export_to_csv, export_to_json, print_summary, print_ai_analysis, print_signals
 from scheduler import run_scheduler
 
 
@@ -51,6 +53,7 @@ def main():
         export_to_csv()
         export_to_json()
         print_summary()
+        print_signals()
         
     elif "--export" in args or "-e" in args:
         # Apenas exportar
@@ -63,6 +66,17 @@ def main():
         # Apenas mostrar resumo
         print("📊 Modo: Resumo\n")
         print_summary()
+        
+    elif "--signals" in args:
+        # Mostrar sinais de trading
+        print("🚦 Modo: Trading Signals\n")
+        print_signals()
+        
+    elif "--ai" in args:
+        # Análise detalhada para AI
+        print("🤖 Modo: AI Analysis\n")
+        print_ai_analysis()
+        print_signals()
         
     elif "--help" in args or "-h" in args:
         print(__doc__)

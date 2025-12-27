@@ -90,6 +90,45 @@ class Quote(Base):
     target_price = Column(Float, nullable=True)         # Analyst target price
     num_analysts = Column(Integer, nullable=True)       # Number of analysts
     
+    # === BENCHMARK COMPARISON ===
+    ibov_change_1d = Column(Float, nullable=True)       # Ibovespa 1D change
+    ibov_change_1w = Column(Float, nullable=True)       # Ibovespa 1W change
+    ibov_change_1m = Column(Float, nullable=True)       # Ibovespa 1M change
+    ibov_change_ytd = Column(Float, nullable=True)      # Ibovespa YTD change
+    sp500_change_1d = Column(Float, nullable=True)      # S&P500 1D change
+    sp500_change_1w = Column(Float, nullable=True)      # S&P500 1W change
+    sp500_change_1m = Column(Float, nullable=True)      # S&P500 1M change
+    sp500_change_ytd = Column(Float, nullable=True)     # S&P500 YTD change
+    vs_ibov_1d = Column(Float, nullable=True)           # Outperformance vs Ibov 1D
+    vs_ibov_1m = Column(Float, nullable=True)           # Outperformance vs Ibov 1M
+    vs_ibov_ytd = Column(Float, nullable=True)          # Outperformance vs Ibov YTD
+    vs_sp500_1d = Column(Float, nullable=True)          # Outperformance vs S&P 1D
+    vs_sp500_1m = Column(Float, nullable=True)          # Outperformance vs S&P 1M
+    vs_sp500_ytd = Column(Float, nullable=True)         # Outperformance vs S&P YTD
+    
+    # === SECTOR CONTEXT ===
+    sector_avg_pe = Column(Float, nullable=True)        # Sector average P/E
+    sector_avg_change_1m = Column(Float, nullable=True) # Sector avg 1M change
+    sector_avg_change_ytd = Column(Float, nullable=True)# Sector avg YTD change
+    vs_sector_pe = Column(Float, nullable=True)         # P/E vs sector avg (%)
+    vs_sector_1m = Column(Float, nullable=True)         # Outperformance vs sector 1M
+    vs_sector_ytd = Column(Float, nullable=True)        # Outperformance vs sector YTD
+    
+    # === TRADING SIGNALS ===
+    signal_golden_cross = Column(Integer, nullable=True)  # 1 if MA50 just crossed above MA200
+    signal_death_cross = Column(Integer, nullable=True)   # 1 if MA50 just crossed below MA200
+    signal_rsi_oversold = Column(Integer, nullable=True)  # 1 if RSI < 30
+    signal_rsi_overbought = Column(Integer, nullable=True)# 1 if RSI > 70
+    signal_52w_high = Column(Integer, nullable=True)      # 1 if at/near 52w high
+    signal_52w_low = Column(Integer, nullable=True)       # 1 if at/near 52w low
+    signal_volume_spike = Column(Integer, nullable=True)  # 1 if volume > 2x average
+    signal_summary = Column(String(50), nullable=True)    # Overall signal: bullish/bearish/neutral
+    
+    # === VOLATILITY ===
+    volatility_30d = Column(Float, nullable=True)       # 30-day volatility (std dev of returns)
+    avg_volume_20d = Column(Float, nullable=True)       # 20-day average volume
+    volume_ratio = Column(Float, nullable=True)         # Current volume / avg volume
+    
     quote_date = Column(DateTime, nullable=False)  # Data da cotação
     fetched_at = Column(DateTime, default=datetime.utcnow)  # Quando foi buscado
     
