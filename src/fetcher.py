@@ -33,6 +33,92 @@ def calculate_change_percent(current: float, previous: float) -> Optional[float]
     return None
 
 
+def calculate_rsi(prices, period: int = 14) -> Optional[float]:
+    """Calculate Relative Strength Index"""
+    if len(prices) < period + 1:
+        return None
+    
+    deltas = prices.diff()
+    gains = deltas.where(deltas > 0, 0)
+    losses = (-deltas).where(deltas < 0, 0)
+    
+    avg_gain = gains.rolling(window=period).mean().iloc[-1]
+    avg_loss = losses.rolling(window=period).mean().iloc[-1]
+    
+    if avg_loss == 0:
+        return 100.0
+    
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return float(rsi)
+
+
+def fetch_fundamental_data(ticker: yf.Ticker) -> dict:
+    """Fetch fundamental and analyst data from yfinance"""
+    try:
+        info = ticker.info
+        
+        # Safe getter for percentages
+        def safe_pct(key):
+            val = info.get(key)
+            if val is not None:
+                return val * 100 if val < 1 else val  # Handle if already in %
+            return None
+        
+        return {
+            # Fundamentals
+            "market_cap": info.get("marketCap"),
+            "pe_ratio": info.get("trailingPE"),
+            "forward_pe": info.get("forwardPE"),
+            "pb_ratio": info.get("priceToBook"),
+            "dividend_yield": safe_pct("dividendYield"),
+            "eps": info.get("trailingEps"),
+            
+            # Risk metrics
+            "beta": info.get("beta"),
+            "week_52_high": info.get("fiftyTwoWeekHigh"),
+            "week_52_low": info.get("fiftyTwoWeekLow"),
+            
+            # Financial health
+            "profit_margin": safe_pct("profitMargins"),
+            "roe": safe_pct("returnOnEquity"),
+            "debt_to_equity": info.get("debtToEquity"),
+            
+            # Analyst data
+            "analyst_rating": info.get("recommendationKey"),
+            "target_price": info.get("targetMeanPrice"),
+            "num_analysts": info.get("numberOfAnalystOpinions"),
+        }
+    except Exception as e:
+        print(f"⚠️ Error fetching fundamentals: {e}")
+        return {}
+
+
+def calculate_technical_indicators(hist, current_price: float) -> dict:
+    """Calculate technical indicators from historical data"""
+    result = {}
+    
+    if len(hist) >= 50:
+        ma_50 = float(hist['Close'].tail(50).mean())
+        result["ma_50"] = ma_50
+        result["above_ma_50"] = 1 if current_price > ma_50 else 0
+    
+    if len(hist) >= 200:
+        ma_200 = float(hist['Close'].tail(200).mean())
+        result["ma_200"] = ma_200
+        result["above_ma_200"] = 1 if current_price > ma_200 else 0
+        
+        if "ma_50" in result:
+            result["ma_50_above_200"] = 1 if result["ma_50"] > ma_200 else 0
+    
+    # RSI
+    rsi = calculate_rsi(hist['Close'])
+    if rsi is not None:
+        result["rsi_14"] = rsi
+    
+    return result
+
+
 def get_historical_price(hist_data, target_date: date) -> Optional[float]:
     """Obtém o preço de fechamento mais próximo de uma data alvo"""
     if hist_data.empty:
@@ -51,10 +137,10 @@ def get_historical_price(hist_data, target_date: date) -> Optional[float]:
 
 def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
     """
-    Busca a cotação de um ativo com dados históricos para comparação
+    Busca a cotação de um ativo com dados históricos, fundamentais e técnicos
     
     Returns:
-        dict com dados da cotação atual + preços históricos ou None se falhar
+        dict com dados completos para análise de AI ou None se falhar
     """
     try:
         ticker = yf.Ticker(ticker_symbol)
@@ -88,7 +174,19 @@ def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
         
         current_price = float(latest['Close'])
         
-        return {
+        # Fetch fundamental data
+        fundamentals = fetch_fundamental_data(ticker)
+        
+        # Calculate technical indicators
+        technicals = calculate_technical_indicators(hist, current_price)
+        
+        # Calculate % from 52-week high
+        week_52_high = fundamentals.get("week_52_high")
+        pct_from_52w_high = None
+        if week_52_high and week_52_high > 0:
+            pct_from_52w_high = ((current_price - week_52_high) / week_52_high) * 100
+        
+        result = {
             "ticker": ticker_symbol,
             "open": float(latest.get('Open', 0)) if latest.get('Open') else None,
             "high": float(latest.get('High', 0)) if latest.get('High') else None,
@@ -110,7 +208,15 @@ def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
             "change_ytd": calculate_change_percent(current_price, price_ytd),
             "change_5y": calculate_change_percent(current_price, price_5y),
             "change_all": calculate_change_percent(current_price, price_all),
+            # % from 52-week high
+            "pct_from_52w_high": pct_from_52w_high,
         }
+        
+        # Merge fundamentals and technicals
+        result.update(fundamentals)
+        result.update(technicals)
+        
+        return result
         
     except Exception as e:
         print(f"❌ Erro ao buscar {ticker_symbol}: {e}")
@@ -201,6 +307,33 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
         existing.price_all_time = quote_data.get("price_all")
         existing.change_5y = quote_data.get("change_5y")
         existing.change_all = quote_data.get("change_all")
+        # Fundamental data
+        existing.market_cap = quote_data.get("market_cap")
+        existing.pe_ratio = quote_data.get("pe_ratio")
+        existing.forward_pe = quote_data.get("forward_pe")
+        existing.pb_ratio = quote_data.get("pb_ratio")
+        existing.dividend_yield = quote_data.get("dividend_yield")
+        existing.eps = quote_data.get("eps")
+        # Risk metrics
+        existing.beta = quote_data.get("beta")
+        existing.week_52_high = quote_data.get("week_52_high")
+        existing.week_52_low = quote_data.get("week_52_low")
+        existing.pct_from_52w_high = quote_data.get("pct_from_52w_high")
+        # Technical indicators
+        existing.ma_50 = quote_data.get("ma_50")
+        existing.ma_200 = quote_data.get("ma_200")
+        existing.rsi_14 = quote_data.get("rsi_14")
+        existing.above_ma_50 = quote_data.get("above_ma_50")
+        existing.above_ma_200 = quote_data.get("above_ma_200")
+        existing.ma_50_above_200 = quote_data.get("ma_50_above_200")
+        # Financial health
+        existing.profit_margin = quote_data.get("profit_margin")
+        existing.roe = quote_data.get("roe")
+        existing.debt_to_equity = quote_data.get("debt_to_equity")
+        # Analyst data
+        existing.analyst_rating = quote_data.get("analyst_rating")
+        existing.target_price = quote_data.get("target_price")
+        existing.num_analysts = quote_data.get("num_analysts")
         existing.fetched_at = datetime.utcnow()
         print(f"🔄 Atualizado: {asset.ticker} = R$ {price_brl:.2f}")
     else:
@@ -226,6 +359,33 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
             price_all_time=quote_data.get("price_all"),
             change_5y=quote_data.get("change_5y"),
             change_all=quote_data.get("change_all"),
+            # Fundamental data
+            market_cap=quote_data.get("market_cap"),
+            pe_ratio=quote_data.get("pe_ratio"),
+            forward_pe=quote_data.get("forward_pe"),
+            pb_ratio=quote_data.get("pb_ratio"),
+            dividend_yield=quote_data.get("dividend_yield"),
+            eps=quote_data.get("eps"),
+            # Risk metrics
+            beta=quote_data.get("beta"),
+            week_52_high=quote_data.get("week_52_high"),
+            week_52_low=quote_data.get("week_52_low"),
+            pct_from_52w_high=quote_data.get("pct_from_52w_high"),
+            # Technical indicators
+            ma_50=quote_data.get("ma_50"),
+            ma_200=quote_data.get("ma_200"),
+            rsi_14=quote_data.get("rsi_14"),
+            above_ma_50=quote_data.get("above_ma_50"),
+            above_ma_200=quote_data.get("above_ma_200"),
+            ma_50_above_200=quote_data.get("ma_50_above_200"),
+            # Financial health
+            profit_margin=quote_data.get("profit_margin"),
+            roe=quote_data.get("roe"),
+            debt_to_equity=quote_data.get("debt_to_equity"),
+            # Analyst data
+            analyst_rating=quote_data.get("analyst_rating"),
+            target_price=quote_data.get("target_price"),
+            num_analysts=quote_data.get("num_analysts"),
             quote_date=datetime.combine(quote_date, datetime.min.time())
         )
         db.add(quote)
