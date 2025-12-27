@@ -10,6 +10,7 @@ Uso:
     python main.py --signals    # Mostra sinais de trading detectados
     python main.py --news       # Mostra análise de sentimento de notícias
     python main.py --ai         # Análise detalhada para AI com sinais e news
+    python main.py --report     # Gera relatórios Human (MD) e AI (JSON)
 """
 import sys
 import os
@@ -19,7 +20,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import init_db
 from fetcher import fetch_all_quotes
-from exporter import export_to_csv, export_to_json, print_summary, print_ai_analysis, print_signals, print_news_sentiment
+from exporter import (
+    export_to_csv, export_to_json, print_summary, 
+    print_ai_analysis, print_signals, print_news_sentiment,
+    generate_reports
+)
 from scheduler import run_scheduler
 
 
@@ -85,6 +90,14 @@ def main():
         print_ai_analysis()
         print_signals()
         print_news_sentiment()
+    
+    elif "--report" in args or "-r" in args:
+        # Gerar relatórios Human (Markdown) e AI (JSON)
+        print("📋 Modo: Report Generation\n")
+        md_path, json_path = generate_reports()
+        print(f"\n✅ Relatórios gerados com sucesso!")
+        print(f"   📄 Human (Markdown): {md_path}")
+        print(f"   🤖 AI (JSON): {json_path}")
         
     elif "--help" in args or "-h" in args:
         print(__doc__)
