@@ -34,15 +34,29 @@ class Quote(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     
-    price_usd = Column(Float, nullable=True)  # Preço em USD (para commodities/crypto)
-    price_brl = Column(Float, nullable=False)  # Preço em BRL
+    price_usd = Column(Float, nullable=True)  # Preço em USD (todos os ativos)
+    price_brl = Column(Float, nullable=False)  # Preço em BRL (todos os ativos)
     
     open_price = Column(Float, nullable=True)
     high_price = Column(Float, nullable=True)
     low_price = Column(Float, nullable=True)
     volume = Column(Float, nullable=True)
     
-    change_percent = Column(Float, nullable=True)  # Variação percentual
+    # Variações percentuais históricas (BRL)
+    change_1d = Column(Float, nullable=True)   # Variação vs. dia anterior
+    change_1w = Column(Float, nullable=True)   # Variação vs. 1 semana
+    change_1m = Column(Float, nullable=True)   # Variação vs. 1 mês
+    change_ytd = Column(Float, nullable=True)  # Variação year-to-date
+    change_5y = Column(Float, nullable=True)   # Variação vs. 5 anos
+    change_all = Column(Float, nullable=True)  # Variação desde o início (all-time)
+    
+    # Preços históricos para referência
+    price_1d_ago = Column(Float, nullable=True)
+    price_1w_ago = Column(Float, nullable=True)
+    price_1m_ago = Column(Float, nullable=True)
+    price_ytd = Column(Float, nullable=True)   # Preço no início do ano
+    price_5y_ago = Column(Float, nullable=True) # Preço há 5 anos
+    price_all_time = Column(Float, nullable=True) # Primeiro preço disponível
     
     quote_date = Column(DateTime, nullable=False)  # Data da cotação
     fetched_at = Column(DateTime, default=datetime.utcnow)  # Quando foi buscado

@@ -41,6 +41,14 @@ def get_latest_quotes(db, quote_date: Optional[date] = None):
     return quotes
 
 
+def format_change(value: Optional[float]) -> str:
+    """Formata uma variação percentual com sinal e cores ANSI"""
+    if value is None:
+        return "N/A"
+    sign = "+" if value >= 0 else ""
+    return f"{sign}{value:.2f}%"
+
+
 def format_quote_row(quote: Quote) -> dict:
     """Formata uma cotação para exportação"""
     return {
@@ -54,6 +62,20 @@ def format_quote_row(quote: Quote) -> dict:
         "maxima": round(quote.high_price, 2) if quote.high_price else None,
         "minima": round(quote.low_price, 2) if quote.low_price else None,
         "volume": quote.volume,
+        # Variações históricas
+        "var_1d": round(quote.change_1d, 2) if quote.change_1d else None,
+        "var_1w": round(quote.change_1w, 2) if quote.change_1w else None,
+        "var_1m": round(quote.change_1m, 2) if quote.change_1m else None,
+        "var_ytd": round(quote.change_ytd, 2) if quote.change_ytd else None,
+        "var_5y": round(quote.change_5y, 2) if quote.change_5y else None,
+        "var_all": round(quote.change_all, 2) if quote.change_all else None,
+        # Preços históricos
+        "preco_1d_ago": round(quote.price_1d_ago, 2) if quote.price_1d_ago else None,
+        "preco_1w_ago": round(quote.price_1w_ago, 2) if quote.price_1w_ago else None,
+        "preco_1m_ago": round(quote.price_1m_ago, 2) if quote.price_1m_ago else None,
+        "preco_inicio_ano": round(quote.price_ytd, 2) if quote.price_ytd else None,
+        "preco_5y_ago": round(quote.price_5y_ago, 2) if quote.price_5y_ago else None,
+        "preco_all_time": round(quote.price_all_time, 2) if quote.price_all_time else None,
         "data_cotacao": quote.quote_date.strftime("%Y-%m-%d"),
         "atualizado_em": quote.fetched_at.strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -158,7 +180,7 @@ def export_to_json(quote_date: Optional[date] = None, filename: Optional[str] = 
 
 
 def print_summary():
-    """Imprime um resumo das cotações mais recentes"""
+    """Imprime um resumo das cotações mais recentes com variações"""
     db = SessionLocal()
     
     try:
@@ -169,23 +191,66 @@ def print_summary():
             return
         
         rows = [format_quote_row(q) for q in quotes]
-        rows.sort(key=lambda x: (x["setor"], x["ticker"]))
         
-        print("\n" + "="*80)
-        print(f"{'TICKER':<10} {'NOME':<25} {'SETOR':<20} {'PREÇO (R$)':>12}")
-        print("="*80)
+        # Formatar variações com cores ANSI e alinhamento correto
+        def color_change(val):
+            if val is None:
+                return "     N/A"
+            # Formato fixo de 8 caracteres: sinal + número + %
+            color = "\033[92m" if val >= 0 else "\033[91m"  # Verde/Vermelho
+            reset = "\033[0m"
+            if val >= 0:
+                return f"{color}{val:>+7.1f}%{reset}"
+            else:
+                return f"{color}{val:>7.1f}%{reset}"
         
-        current_sector = None
-        for row in rows:
-            if row["setor"] != current_sector:
-                current_sector = row["setor"]
-                print(f"\n--- {current_sector.upper()} ---")
+        def print_section(title, section_rows):
+            """Imprime uma seção de ativos"""
+            if not section_rows:
+                return
             
-            print(f"{row['ticker']:<10} {row['nome'][:24]:<25} {row['setor'][:19]:<20} {row['preco_brl']:>12,.2f}")
+            print(f"\n{'='*140}")
+            print(f"  {title}")
+            print(f"{'='*140}")
+            print(f"{'TICKER':<10} {'NOME':<20} {'BRL':>12} {'USD':>10} {'1D':>8} {'1W':>8} {'1M':>8} {'YTD':>8} {'5Y':>8} {'ALL':>8}")
+            print("-"*140)
+            
+            current_sector = None
+            for row in section_rows:
+                if row["setor"] != current_sector:
+                    current_sector = row["setor"]
+                    print(f"\n--- {current_sector.upper()} ---")
+                
+                usd_str = f"{row['preco_usd']:>10.2f}" if row['preco_usd'] else "       N/A"
+                
+                print(f"{row['ticker']:<10} {row['nome'][:19]:<20} {row['preco_brl']:>12,.2f} {usd_str} "
+                      f"{color_change(row['var_1d'])} {color_change(row['var_1w'])} "
+                      f"{color_change(row['var_1m'])} {color_change(row['var_ytd'])} "
+                      f"{color_change(row['var_5y'])} {color_change(row['var_all'])}")
         
-        print("\n" + "="*80)
-        print(f"Total de ativos: {len(rows)}")
-        print("="*80 + "\n")
+        # Separar por tipo de ativo
+        br_stocks = [r for r in rows if r["tipo"] == "stock"]
+        us_stocks = [r for r in rows if r["tipo"] == "us_stock"]
+        commodities = [r for r in rows if r["tipo"] == "commodity"]
+        crypto = [r for r in rows if r["tipo"] == "crypto"]
+        currency = [r for r in rows if r["tipo"] == "currency"]
+        
+        # Ordenar cada seção por setor e ticker
+        for section in [br_stocks, us_stocks, commodities, crypto, currency]:
+            section.sort(key=lambda x: (x["setor"], x["ticker"]))
+        
+        # Imprimir cada seção
+        print_section("🇧🇷 AÇÕES BRASILEIRAS (B3)", br_stocks)
+        print_section("🇺🇸 AÇÕES AMERICANAS (NYSE/NASDAQ)", us_stocks)
+        print_section("🥇 COMMODITIES", commodities)
+        print_section("₿ CRIPTOMOEDAS", crypto)
+        print_section("💱 CÂMBIO", currency)
+        
+        print(f"\n{'='*140}")
+        print(f"Total de ativos: {len(rows)} | 🇧🇷 Brasil: {len(br_stocks)} | 🇺🇸 EUA: {len(us_stocks)} | "
+              f"Commodities: {len(commodities)} | Crypto: {len(crypto)}")
+        print("Legenda: 1D = Dia anterior | 1W = 1 semana | 1M = 1 mês | YTD = Ano até a data | 5Y = 5 anos | ALL = Desde o início")
+        print("="*140 + "\n")
         
     finally:
         db.close()

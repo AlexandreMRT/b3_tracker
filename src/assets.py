@@ -138,10 +138,44 @@ CURRENCY = {
     "USDBRL=X": {"name": "Dólar/Real", "sector": "Câmbio", "unit": ""},
 }
 
+# Ações Americanas (preços em USD, serão convertidos para BRL)
+US_STOCKS = {
+    # Big Tech
+    "AAPL": {"name": "Apple", "sector": "Tecnologia"},
+    "MSFT": {"name": "Microsoft", "sector": "Tecnologia"},
+    "GOOGL": {"name": "Alphabet (Google)", "sector": "Tecnologia"},
+    "AMZN": {"name": "Amazon", "sector": "Tecnologia"},
+    "META": {"name": "Meta (Facebook)", "sector": "Tecnologia"},
+    "NVDA": {"name": "NVIDIA", "sector": "Tecnologia"},
+    "TSLA": {"name": "Tesla", "sector": "Automotivo"},
+    
+    # Financeiro
+    "JPM": {"name": "JPMorgan Chase", "sector": "Bancário"},
+    "BAC": {"name": "Bank of America", "sector": "Bancário"},
+    "WFC": {"name": "Wells Fargo", "sector": "Bancário"},
+    "GS": {"name": "Goldman Sachs", "sector": "Bancário"},
+    
+    # Saúde
+    "JNJ": {"name": "Johnson & Johnson", "sector": "Saúde"},
+    "UNH": {"name": "UnitedHealth", "sector": "Saúde"},
+    "PFE": {"name": "Pfizer", "sector": "Farmacêutico"},
+    
+    # Consumo
+    "KO": {"name": "Coca-Cola", "sector": "Bebidas"},
+    "PEP": {"name": "PepsiCo", "sector": "Bebidas"},
+    "MCD": {"name": "McDonald's", "sector": "Restaurantes"},
+    "WMT": {"name": "Walmart", "sector": "Varejo"},
+    
+    # Energia
+    "XOM": {"name": "Exxon Mobil", "sector": "Petróleo e Gás"},
+    "CVX": {"name": "Chevron", "sector": "Petróleo e Gás"},
+}
+
 def get_all_assets():
     """Retorna todos os ativos para rastrear"""
     all_assets = {}
     all_assets.update(IBOVESPA_STOCKS)
+    all_assets.update(US_STOCKS)
     all_assets.update(COMMODITIES)
     all_assets.update(CRYPTO)
     all_assets.update(CURRENCY)
