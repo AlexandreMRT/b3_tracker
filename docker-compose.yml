@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    container_name: b3_tracker
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+      - ./src:/app/src
+    environment:
+      - TZ=America/Sao_Paulo
+      - SCHEDULE_ENABLED=true
+      - SCHEDULE_TIME=18:00
+    restart: unless-stopped
+
+  # Serviço para rodar comandos únicos
+  runner:
+    build: .
+    container_name: b3_runner
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+      - ./src:/app/src
+    environment:
+      - TZ=America/Sao_Paulo
+    profiles:
+      - tools
