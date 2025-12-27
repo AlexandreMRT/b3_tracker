@@ -58,6 +58,38 @@ class Quote(Base):
     price_5y_ago = Column(Float, nullable=True) # Preço há 5 anos
     price_all_time = Column(Float, nullable=True) # Primeiro preço disponível
     
+    # === FUNDAMENTAL DATA (for AI analysis) ===
+    market_cap = Column(Float, nullable=True)        # Market capitalization
+    pe_ratio = Column(Float, nullable=True)          # Price-to-Earnings ratio
+    forward_pe = Column(Float, nullable=True)        # Forward P/E ratio
+    pb_ratio = Column(Float, nullable=True)          # Price-to-Book ratio
+    dividend_yield = Column(Float, nullable=True)    # Dividend yield (%)
+    eps = Column(Float, nullable=True)               # Earnings per share
+    
+    # === RISK METRICS ===
+    beta = Column(Float, nullable=True)              # Beta vs market
+    week_52_high = Column(Float, nullable=True)      # 52-week high price
+    week_52_low = Column(Float, nullable=True)       # 52-week low price
+    pct_from_52w_high = Column(Float, nullable=True) # % distance from 52w high
+    
+    # === TECHNICAL INDICATORS ===
+    ma_50 = Column(Float, nullable=True)             # 50-day moving average
+    ma_200 = Column(Float, nullable=True)            # 200-day moving average
+    rsi_14 = Column(Float, nullable=True)            # 14-day RSI
+    above_ma_50 = Column(Integer, nullable=True)     # 1 if price > MA50, 0 otherwise
+    above_ma_200 = Column(Integer, nullable=True)    # 1 if price > MA200, 0 otherwise
+    ma_50_above_200 = Column(Integer, nullable=True) # Golden cross indicator
+    
+    # === FINANCIAL HEALTH ===
+    profit_margin = Column(Float, nullable=True)     # Profit margin (%)
+    roe = Column(Float, nullable=True)               # Return on Equity (%)
+    debt_to_equity = Column(Float, nullable=True)    # Debt/Equity ratio
+    
+    # === ANALYST DATA ===
+    analyst_rating = Column(String(20), nullable=True)  # buy, hold, sell
+    target_price = Column(Float, nullable=True)         # Analyst target price
+    num_analysts = Column(Integer, nullable=True)       # Number of analysts
+    
     quote_date = Column(DateTime, nullable=False)  # Data da cotação
     fetched_at = Column(DateTime, default=datetime.utcnow)  # Quando foi buscado
     
