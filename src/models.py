@@ -129,6 +129,16 @@ class Quote(Base):
     avg_volume_20d = Column(Float, nullable=True)       # 20-day average volume
     volume_ratio = Column(Float, nullable=True)         # Current volume / avg volume
     
+    # === NEWS SENTIMENT ===
+    news_sentiment_pt = Column(Float, nullable=True)       # PT-BR sentiment score (-1 to +1)
+    news_sentiment_en = Column(Float, nullable=True)       # English sentiment score (-1 to +1)
+    news_sentiment_combined = Column(Float, nullable=True) # Combined weighted score
+    news_count_pt = Column(Integer, nullable=True)         # Number of PT-BR news articles
+    news_count_en = Column(Integer, nullable=True)         # Number of English news articles
+    news_headline_pt = Column(String(500), nullable=True)  # Latest PT-BR headline
+    news_headline_en = Column(String(500), nullable=True)  # Latest English headline
+    news_sentiment_label = Column(String(20), nullable=True)  # positive/negative/neutral
+    
     quote_date = Column(DateTime, nullable=False)  # Data da cotação
     fetched_at = Column(DateTime, default=datetime.utcnow)  # Quando foi buscado
     

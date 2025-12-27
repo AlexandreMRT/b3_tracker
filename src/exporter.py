@@ -127,6 +127,15 @@ def format_quote_row(quote: Quote) -> dict:
         "volatility_30d": round(quote.volatility_30d, 2) if quote.volatility_30d else None,
         "avg_volume_20d": quote.avg_volume_20d,
         "volume_ratio": round(quote.volume_ratio, 2) if quote.volume_ratio else None,
+        # News sentiment
+        "news_sentiment_pt": round(quote.news_sentiment_pt, 3) if quote.news_sentiment_pt else None,
+        "news_sentiment_en": round(quote.news_sentiment_en, 3) if quote.news_sentiment_en else None,
+        "news_sentiment_combined": round(quote.news_sentiment_combined, 3) if quote.news_sentiment_combined else None,
+        "news_count_pt": quote.news_count_pt,
+        "news_count_en": quote.news_count_en,
+        "news_headline_pt": quote.news_headline_pt,
+        "news_headline_en": quote.news_headline_en,
+        "news_sentiment_label": quote.news_sentiment_label,
         "data_cotacao": quote.quote_date.strftime("%Y-%m-%d"),
         "atualizado_em": quote.fetched_at.strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -467,6 +476,112 @@ def print_signals():
         db.close()
 
 
+def print_news_sentiment():
+    """Imprime análise de sentimento de notícias"""
+    db = SessionLocal()
+    
+    try:
+        quotes = get_latest_quotes(db)
+        
+        if not quotes:
+            print("⚠️ Nenhuma cotação encontrada")
+            return
+        
+        rows = [format_quote_row(q) for q in quotes]
+        stocks = [r for r in rows if r["tipo"] in ("stock", "us_stock")]
+        
+        # Filter by sentiment
+        positive = [r for r in stocks if r.get('news_sentiment_label') == 'positive']
+        negative = [r for r in stocks if r.get('news_sentiment_label') == 'negative']
+        neutral = [r for r in stocks if r.get('news_sentiment_label') == 'neutral']
+        
+        # Sort by combined sentiment score
+        positive.sort(key=lambda x: x.get('news_sentiment_combined', 0) or 0, reverse=True)
+        negative.sort(key=lambda x: x.get('news_sentiment_combined', 0) or 0)
+        
+        # Separate Brazilian and US stocks
+        br_positive = [r for r in positive if r["tipo"] == "stock"]
+        us_positive = [r for r in positive if r["tipo"] == "us_stock"]
+        br_negative = [r for r in negative if r["tipo"] == "stock"]
+        us_negative = [r for r in negative if r["tipo"] == "us_stock"]
+        
+        def format_score(score):
+            if score is None:
+                return "  N/A"
+            color = "\033[92m" if score >= 0.2 else ("\033[91m" if score <= -0.2 else "\033[93m")
+            return f"{color}{score:>+.2f}\033[0m"
+        
+        def truncate(text, max_len=50):
+            if not text:
+                return ""
+            return text[:max_len] + "..." if len(text) > max_len else text
+        
+        print(f"\n{'='*120}")
+        print("  📰 NEWS SENTIMENT ANALYSIS")
+        print(f"{'='*120}")
+        
+        # Brazilian stocks with positive sentiment
+        if br_positive:
+            print(f"\n🇧🇷 BRAZIL - 🟢 POSITIVE SENTIMENT ({len(br_positive)} stocks):")
+            for r in br_positive[:8]:
+                pt_score = format_score(r.get('news_sentiment_pt'))
+                en_score = format_score(r.get('news_sentiment_en'))
+                combined = format_score(r.get('news_sentiment_combined'))
+                pt_count = r.get('news_count_pt', 0) or 0
+                en_count = r.get('news_count_en', 0) or 0
+                headline = truncate(r.get('news_headline_pt') or r.get('news_headline_en', ''))
+                print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} PT: {pt_score} ({pt_count}) | EN: {en_score} ({en_count}) | Combined: {combined}")
+                if headline:
+                    print(f"            \033[90m\"{headline}\"\033[0m")
+        
+        # Brazilian stocks with negative sentiment
+        if br_negative:
+            print(f"\n🇧🇷 BRAZIL - 🔴 NEGATIVE SENTIMENT ({len(br_negative)} stocks):")
+            for r in br_negative[:8]:
+                pt_score = format_score(r.get('news_sentiment_pt'))
+                en_score = format_score(r.get('news_sentiment_en'))
+                combined = format_score(r.get('news_sentiment_combined'))
+                pt_count = r.get('news_count_pt', 0) or 0
+                en_count = r.get('news_count_en', 0) or 0
+                headline = truncate(r.get('news_headline_pt') or r.get('news_headline_en', ''))
+                print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} PT: {pt_score} ({pt_count}) | EN: {en_score} ({en_count}) | Combined: {combined}")
+                if headline:
+                    print(f"            \033[90m\"{headline}\"\033[0m")
+        
+        # US stocks with positive sentiment
+        if us_positive:
+            print(f"\n🇺🇸 USA - 🟢 POSITIVE SENTIMENT ({len(us_positive)} stocks):")
+            for r in us_positive[:8]:
+                en_score = format_score(r.get('news_sentiment_en'))
+                en_count = r.get('news_count_en', 0) or 0
+                headline = truncate(r.get('news_headline_en', ''))
+                print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} EN: {en_score} ({en_count} articles)")
+                if headline:
+                    print(f"            \033[90m\"{headline}\"\033[0m")
+        
+        # US stocks with negative sentiment
+        if us_negative:
+            print(f"\n🇺🇸 USA - 🔴 NEGATIVE SENTIMENT ({len(us_negative)} stocks):")
+            for r in us_negative[:8]:
+                en_score = format_score(r.get('news_sentiment_en'))
+                en_count = r.get('news_count_en', 0) or 0
+                headline = truncate(r.get('news_headline_en', ''))
+                print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} EN: {en_score} ({en_count} articles)")
+                if headline:
+                    print(f"            \033[90m\"{headline}\"\033[0m")
+        
+        # Summary
+        total_with_news = len([r for r in stocks if r.get('news_count_pt', 0) or r.get('news_count_en', 0)])
+        print(f"\n{'='*120}")
+        print(f"Summary: {len(positive)} positive | {len(negative)} negative | {len(neutral)} neutral | {total_with_news} stocks with news")
+        print("Score range: -1.0 (very negative) to +1.0 (very positive) | Threshold: ±0.2 for classification")
+        print("Brazilian stocks: 60% PT weight + 40% EN weight for combined score")
+        print(f"{'='*120}\n")
+        
+    finally:
+        db.close()
+
+
 def export_ai_json(filename: Optional[str] = None) -> str:
     """
     Exporta dados em formato otimizado para análise de AI
@@ -526,3 +641,4 @@ if __name__ == "__main__":
     print_summary()
     print_ai_analysis()
     print_signals()
+    print_news_sentiment()

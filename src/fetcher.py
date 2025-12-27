@@ -5,10 +5,56 @@ import yfinance as yf
 from datetime import datetime, date, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
+import urllib.parse
 
 from assets import get_all_assets, IBOVESPA_STOCKS, COMMODITIES, CRYPTO, CURRENCY, US_STOCKS
 from models import Asset, Quote
 from database import SessionLocal
+
+# Initialize NLTK VADER for sentiment analysis
+try:
+    import nltk
+    from nltk.sentiment.vader import SentimentIntensityAnalyzer
+    try:
+        nltk.data.find('sentiment/vader_lexicon.zip')
+    except LookupError:
+        nltk.download('vader_lexicon', quiet=True)
+    _vader = SentimentIntensityAnalyzer()
+    
+    # Add Portuguese financial keywords to VADER lexicon
+    # Positive words
+    pt_positive = {
+        'alta': 2.0, 'subiu': 2.0, 'sobe': 1.5, 'valoriza': 2.0, 'valorização': 2.0,
+        'lucro': 2.5, 'lucros': 2.5, 'crescimento': 1.5, 'cresce': 1.5, 'cresceu': 1.5,
+        'recorde': 2.0, 'positivo': 1.5, 'otimista': 1.5, 'supera': 1.5, 'superou': 1.5,
+        'dividendos': 1.5, 'rentabilidade': 1.5, 'aprovação': 1.5, 'aprovado': 1.5,
+        'expansão': 1.5, 'expande': 1.5, 'contrato': 1.0, 'parceria': 1.0,
+        'aquisição': 1.0, 'investimento': 1.0, 'recomendação': 0.5, 'compra': 1.0,
+    }
+    # Negative words
+    pt_negative = {
+        'queda': -2.0, 'caiu': -2.0, 'cai': -1.5, 'desvaloriza': -2.0, 'desvalorização': -2.0,
+        'prejuízo': -2.5, 'prejuízos': -2.5, 'perdas': -2.0, 'perda': -2.0,
+        'negativo': -1.5, 'pessimista': -1.5, 'rebaixado': -2.0, 'rebaixa': -2.0,
+        'dívida': -1.5, 'dívidas': -1.5, 'endividamento': -1.5, 'risco': -1.0,
+        'crise': -2.0, 'problema': -1.5, 'problemas': -1.5, 'investigação': -1.5,
+        'multa': -2.0, 'fraude': -3.0, 'demissão': -1.5, 'demissões': -1.5,
+        'rombo': -2.5, 'escândalo': -3.0, 'falência': -3.0, 'recuperação judicial': -2.5,
+    }
+    _vader.lexicon.update(pt_positive)
+    _vader.lexicon.update(pt_negative)
+    
+except Exception as e:
+    print(f"⚠️ VADER not available: {e}")
+    _vader = None
+
+# Initialize feedparser for Google News RSS
+try:
+    import feedparser
+    _feedparser_available = True
+except Exception as e:
+    print(f"⚠️ feedparser not available: {e}")
+    _feedparser_available = False
 
 
 def get_usd_brl_rate() -> float:
@@ -190,6 +236,185 @@ def calculate_signals(quote_data: dict) -> dict:
         signals["signal_summary"] = "neutral"
     
     return signals
+
+
+def fetch_news_english(ticker_symbol: str, max_news: int = 10) -> list:
+    """Fetch English news from yfinance"""
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        news = ticker.news
+        
+        if not news:
+            return []
+        
+        results = []
+        for item in news[:max_news]:
+            title = item.get("title", "")
+            # yfinance news structure: use content summary if available
+            content = item.get("summary", item.get("description", ""))
+            text = f"{title}. {content}" if content else title
+            results.append({
+                "title": title,
+                "text": text,
+                "source": item.get("publisher", ""),
+                "link": item.get("link", ""),
+            })
+        
+        return results
+    except Exception as e:
+        print(f"    ⚠️ Error fetching EN news for {ticker_symbol}: {e}")
+        return []
+
+
+def fetch_news_portuguese(company_name: str, ticker: str, max_news: int = 10) -> list:
+    """Fetch Portuguese news from Google News RSS"""
+    if not _feedparser_available:
+        return []
+    
+    try:
+        # Clean ticker for search (remove .SA)
+        clean_ticker = ticker.replace(".SA", "")
+        
+        # Search for company name and ticker
+        search_query = f"{company_name} OR {clean_ticker} ações bolsa"
+        encoded_query = urllib.parse.quote(search_query)
+        
+        # Google News RSS for Portuguese (Brazil)
+        rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=pt-BR&gl=BR&ceid=BR:pt-419"
+        
+        feed = feedparser.parse(rss_url)
+        
+        if not feed.entries:
+            return []
+        
+        results = []
+        for entry in feed.entries[:max_news]:
+            title = entry.get("title", "")
+            summary = entry.get("summary", "")
+            text = f"{title}. {summary}" if summary else title
+            results.append({
+                "title": title,
+                "text": text,
+                "source": entry.get("source", {}).get("title", "Google News"),
+                "link": entry.get("link", ""),
+            })
+        
+        return results
+    except Exception as e:
+        print(f"    ⚠️ Error fetching PT news for {company_name}: {e}")
+        return []
+
+
+def analyze_sentiment_english(texts: list) -> tuple:
+    """Analyze sentiment of English texts using VADER"""
+    if not _vader or not texts:
+        return None, None
+    
+    scores = []
+    for item in texts:
+        text = item.get("text", item) if isinstance(item, dict) else item
+        if text:
+            score = _vader.polarity_scores(text)
+            scores.append(score["compound"])
+    
+    if not scores:
+        return None, None
+    
+    avg_score = sum(scores) / len(scores)
+    # Get the headline from the first (most recent) article
+    headline = texts[0].get("title", "") if texts and isinstance(texts[0], dict) else ""
+    
+    return avg_score, headline
+
+
+def analyze_sentiment_portuguese(texts: list) -> tuple:
+    """Analyze sentiment of Portuguese texts using enhanced VADER with PT keywords"""
+    if not _vader or not texts:
+        return None, None
+    
+    scores = []
+    for item in texts:
+        text = item.get("text", item) if isinstance(item, dict) else item
+        if text:
+            # Lowercase for better PT keyword matching
+            score = _vader.polarity_scores(text.lower())
+            scores.append(score["compound"])
+    
+    if not scores:
+        return None, None
+    
+    avg_score = sum(scores) / len(scores)
+    # Get the headline from the first (most recent) article
+    headline = texts[0].get("title", "") if texts and isinstance(texts[0], dict) else ""
+    
+    return avg_score, headline
+
+
+def fetch_news_sentiment(ticker_symbol: str, company_name: str, is_brazilian: bool = True) -> dict:
+    """
+    Fetch and analyze news sentiment for a stock
+    
+    Args:
+        ticker_symbol: Stock ticker (e.g., "PETR4.SA", "AAPL")
+        company_name: Company name for search
+        is_brazilian: Whether this is a Brazilian stock (triggers PT-BR search)
+    
+    Returns:
+        dict with sentiment scores and headlines
+    """
+    result = {
+        "news_sentiment_pt": None,
+        "news_sentiment_en": None,
+        "news_sentiment_combined": None,
+        "news_count_pt": 0,
+        "news_count_en": 0,
+        "news_headline_pt": None,
+        "news_headline_en": None,
+        "news_sentiment_label": None,
+    }
+    
+    # Fetch English news (always, using yfinance)
+    en_news = fetch_news_english(ticker_symbol)
+    if en_news:
+        result["news_count_en"] = len(en_news)
+        score, headline = analyze_sentiment_english(en_news)
+        if score is not None:
+            result["news_sentiment_en"] = score
+            result["news_headline_en"] = headline[:500] if headline else None
+    
+    # Fetch Portuguese news (for Brazilian stocks)
+    if is_brazilian:
+        pt_news = fetch_news_portuguese(company_name, ticker_symbol)
+        if pt_news:
+            result["news_count_pt"] = len(pt_news)
+            score, headline = analyze_sentiment_portuguese(pt_news)
+            if score is not None:
+                result["news_sentiment_pt"] = score
+                result["news_headline_pt"] = headline[:500] if headline else None
+    
+    # Calculate combined score
+    pt_score = result["news_sentiment_pt"]
+    en_score = result["news_sentiment_en"]
+    
+    if pt_score is not None and en_score is not None:
+        # Weight: 60% local (PT), 40% international (EN) for Brazilian stocks
+        result["news_sentiment_combined"] = (pt_score * 0.6) + (en_score * 0.4)
+    elif pt_score is not None:
+        result["news_sentiment_combined"] = pt_score
+    elif en_score is not None:
+        result["news_sentiment_combined"] = en_score
+    
+    # Determine label
+    combined = result["news_sentiment_combined"]
+    if combined is not None:
+        if combined >= 0.2:
+            result["news_sentiment_label"] = "positive"
+        elif combined <= -0.2:
+            result["news_sentiment_label"] = "negative"
+        else:
+            result["news_sentiment_label"] = "neutral"
+    
+    return result
 
 
 # Global cache for benchmark data (fetched once per run)
@@ -522,6 +747,15 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
         existing.volatility_30d = quote_data.get("volatility_30d")
         existing.avg_volume_20d = quote_data.get("avg_volume_20d")
         existing.volume_ratio = quote_data.get("volume_ratio")
+        # News sentiment
+        existing.news_sentiment_pt = quote_data.get("news_sentiment_pt")
+        existing.news_sentiment_en = quote_data.get("news_sentiment_en")
+        existing.news_sentiment_combined = quote_data.get("news_sentiment_combined")
+        existing.news_count_pt = quote_data.get("news_count_pt")
+        existing.news_count_en = quote_data.get("news_count_en")
+        existing.news_headline_pt = quote_data.get("news_headline_pt")
+        existing.news_headline_en = quote_data.get("news_headline_en")
+        existing.news_sentiment_label = quote_data.get("news_sentiment_label")
         existing.fetched_at = datetime.utcnow()
         print(f"🔄 Atualizado: {asset.ticker} = R$ {price_brl:.2f}")
     else:
@@ -602,6 +836,15 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
             volatility_30d=quote_data.get("volatility_30d"),
             avg_volume_20d=quote_data.get("avg_volume_20d"),
             volume_ratio=quote_data.get("volume_ratio"),
+            # News sentiment
+            news_sentiment_pt=quote_data.get("news_sentiment_pt"),
+            news_sentiment_en=quote_data.get("news_sentiment_en"),
+            news_sentiment_combined=quote_data.get("news_sentiment_combined"),
+            news_count_pt=quote_data.get("news_count_pt"),
+            news_count_en=quote_data.get("news_count_en"),
+            news_headline_pt=quote_data.get("news_headline_pt"),
+            news_headline_en=quote_data.get("news_headline_en"),
+            news_sentiment_label=quote_data.get("news_sentiment_label"),
             quote_date=datetime.combine(quote_date, datetime.min.time())
         )
         db.add(quote)
@@ -638,6 +881,10 @@ def fetch_all_quotes():
                 benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
                 quote_data.update(benchmark_comparison)
                 
+                # Add news sentiment (Brazilian stocks get both PT and EN)
+                news_data = fetch_news_sentiment(ticker, info.get("name", ""), is_brazilian=True)
+                quote_data.update(news_data)
+                
                 price_brl = quote_data["close"]
                 price_usd = price_brl / usd_brl  # Converter BRL para USD
                 asset = get_or_create_asset(db, ticker, info, "stock")
@@ -654,6 +901,10 @@ def fetch_all_quotes():
                 # Add benchmark comparison
                 benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
                 quote_data.update(benchmark_comparison)
+                
+                # Add news sentiment (US stocks get only EN)
+                news_data = fetch_news_sentiment(ticker, info.get("name", ""), is_brazilian=False)
+                quote_data.update(news_data)
                 
                 price_usd = quote_data["close"]
                 price_brl = price_usd * usd_brl  # Converter USD para BRL
