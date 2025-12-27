@@ -1,6 +1,17 @@
 # 📈 B3 Tracker
 
-Rastreador de cotações da bolsa brasileira (B3), commodities (ouro, prata, platina) e criptomoedas (Bitcoin, Ethereum).
+Rastreador de cotações da bolsa brasileira (B3), ações americanas, commodities e criptomoedas com análise técnica, fundamentalista e sinais de trading para alimentar modelos de AI.
+
+## ✨ Recursos
+
+- 📊 **97+ ativos rastreados** (Ibovespa, S&P 500, commodities, crypto)
+- 💱 **Dual currency** - Preços em BRL e USD para todos os ativos
+- 📈 **Comparações históricas** - 1D, 1W, 1M, YTD, 5Y, ALL
+- 🎯 **Benchmark comparison** - Performance vs IBOV e S&P 500
+- 🔬 **Análise fundamentalista** - P/E, P/B, dividend yield, beta, ROE
+- 📉 **Indicadores técnicos** - RSI-14, MA50, MA200, golden/death cross
+- 🚦 **Trading signals** - Detecção automática de sinais bullish/bearish
+- 🤖 **AI-ready exports** - JSON otimizado para modelos de machine learning
 
 ## 🚀 Quick Start
 
@@ -33,9 +44,11 @@ docker compose down
 | Comando | Descrição |
 |---------|-----------|
 | `python src/main.py` | Inicia scheduler (roda diariamente às 18h) |
-| `python src/main.py --once` | Busca cotações uma vez e sai |
+| `python src/main.py --once` | Busca cotações uma vez e mostra sinais |
 | `python src/main.py --export` | Exporta dados existentes para CSV/JSON |
 | `python src/main.py --summary` | Mostra resumo das cotações no terminal |
+| `python src/main.py --signals` | Mostra sinais de trading detectados |
+| `python src/main.py --ai` | Mostra análise AI + sinais |
 
 ## 📁 Estrutura do Projeto
 
@@ -46,33 +59,45 @@ b3_tracker/
 ├── requirements.txt      # Dependências
 ├── src/
 │   ├── main.py           # Ponto de entrada
-│   ├── assets.py         # Lista de ativos (85+ ações)
+│   ├── assets.py         # Lista de ativos (97+ ações)
 │   ├── database.py       # Conexão SQLite
-│   ├── models.py         # Modelos de dados
-│   ├── fetcher.py        # Busca cotações (yfinance)
-│   ├── exporter.py       # Exporta CSV/JSON
+│   ├── models.py         # Modelos de dados (70+ campos)
+│   ├── fetcher.py        # Busca cotações + indicadores
+│   ├── exporter.py       # Exporta CSV/JSON + views
 │   └── scheduler.py      # Agendamento diário
 ├── data/                 # Banco de dados SQLite
 │   └── cotacoes.db
 └── exports/              # Arquivos exportados
     ├── cotacoes_YYYY-MM-DD.csv
-    └── cotacoes_YYYY-MM-DD.json
+    ├── cotacoes_YYYY-MM-DD.json
+    └── ai_analysis_YYYY-MM-DD.json
 ```
 
 ## 💾 Ativos Rastreados
 
-### Ações do Ibovespa (~85 ativos)
+### 🇧🇷 Ações do Ibovespa (77 ativos)
 
 | Setor | Exemplos |
 |-------|----------|
-| Bancário | BBAS3, ITUB4, BBDC4, SANB11 |
-| Petróleo e Gás | PETR4, PRIO3, CSAN3 |
-| Mineração | VALE3, CSNA3, CMIN3 |
-| Energia Elétrica | ELET3, EGIE3, EQTL3 |
-| Varejo | MGLU3, LREN3, AMER3 |
-| Saúde | RDOR3, HAPV3, RADL3 |
-| Industrial | WEGE3, EMBR3, SUZB3 |
+| Bancário | BBAS3, ITUB4, BBDC4, SANB11, BPAC11 |
+| Petróleo e Gás | PETR4, PRIO3, CSAN3, VBBR3 |
+| Mineração | VALE3, CSNA3, CMIN3, GGBR4 |
+| Energia Elétrica | ELET3, EGIE3, EQTL3, CPFE3 |
+| Varejo | MGLU3, LREN3, AMER3, BHIA3 |
+| Saúde | RDOR3, HAPV3, RADL3, FLRY3 |
+| Industrial | WEGE3, EMBR3, SUZB3, KLBN11 |
 | E muitos outros... | |
+
+### 🇺🇸 Ações Americanas (20 ativos)
+
+| Setor | Exemplos |
+|-------|----------|
+| Big Tech | AAPL, MSFT, GOOGL, AMZN, META, NVDA |
+| Financeiro | JPM, BAC, WFC, GS |
+| Saúde | JNJ, UNH, PFE |
+| Consumo | KO, PEP, MCD, WMT |
+| Energia | XOM |
+| Automotivo | TSLA |
 
 ### Commodities
 
@@ -96,33 +121,128 @@ b3_tracker/
 |-----|---------|
 | Dólar/Real | USDBRL=X |
 
+## 🔬 Dados Disponíveis
+
+### Preços e Variações
+- Preço atual (BRL e USD)
+- Variações: 1D, 1W, 1M, YTD, 5Y, All-time
+- Preços históricos de referência
+
+### Benchmark Comparison
+- Performance do IBOV e S&P 500
+- Outperformance vs benchmarks (vs_ibov_*, vs_sp500_*)
+
+### Análise Fundamentalista
+- P/E Ratio, Forward P/E
+- P/B Ratio
+- Dividend Yield, EPS
+- Market Cap
+- Profit Margin, ROE, Debt/Equity
+
+### Métricas de Risco
+- Beta
+- 52-week high/low
+- % from 52-week high
+
+### Indicadores Técnicos
+- RSI-14 (Relative Strength Index)
+- MA50, MA200 (Moving Averages)
+- Golden Cross / Death Cross detection
+- 30-day volatility
+- Volume ratio (vs 20-day average)
+
+### Trading Signals
+- `signal_rsi_oversold` - RSI < 30
+- `signal_rsi_overbought` - RSI > 70
+- `signal_52w_high` - Near 52-week high
+- `signal_52w_low` - Near 52-week low
+- `signal_golden_cross` - MA50 > MA200
+- `signal_death_cross` - MA50 < MA200
+- `signal_volume_spike` - Volume > 2x average
+- `signal_summary` - bullish / bearish / neutral
+
+### Dados de Analistas
+- Analyst rating (buy/hold/sell)
+- Target price
+- Number of analysts
+
 ## 📊 Formato dos Dados Exportados
 
 ### CSV
 
 ```csv
-ticker,nome,setor,tipo,preco_brl,preco_usd,abertura,maxima,minima,volume,data_cotacao,atualizado_em
-BBAS3,Banco do Brasil,Bancário,stock,21.85,,21.50,22.10,21.30,5000000,2025-12-26,2025-12-26 18:00:00
+ticker,nome,setor,tipo,preco_brl,preco_usd,var_1d,var_1w,var_1m,var_ytd,vs_ibov_ytd,vs_sp500_ytd,pe_ratio,rsi_14,signal_summary,...
+BBAS3,Banco do Brasil,Bancário,stock,21.85,3.94,+0.5,+2.1,+5.3,+12.4,-21.4,-5.4,4.2,55,neutral,...
+AAPL,Apple,Technology,us_stock,1515.57,273.39,+0.3,+1.2,+3.1,+28.5,-5.3,+10.7,28.5,62,bullish,...
 ```
 
-### JSON
+### JSON (AI-optimized)
 
 ```json
 {
-  "data_exportacao": "2025-12-26 18:00:00",
-  "total_ativos": 90,
-  "cotacoes": [
+  "metadata": {
+    "generated_at": "2025-12-27T00:15:00",
+    "total_assets": 104,
+    "data_version": "2.0",
+    "description": "B3 and US stock data with fundamentals for AI analysis"
+  },
+  "market_summary": {
+    "brazil_stocks": 77,
+    "us_stocks": 20,
+    "commodities": 4,
+    "crypto": 2
+  },
+  "assets": [
     {
       "ticker": "BBAS3",
       "nome": "Banco do Brasil",
       "setor": "Bancário",
       "tipo": "stock",
       "preco_brl": 21.85,
-      "preco_usd": null,
-      "data_cotacao": "2025-12-26"
+      "preco_usd": 3.94,
+      "var_1d": 0.5,
+      "var_ytd": 12.4,
+      "vs_ibov_ytd": -21.4,
+      "pe_ratio": 4.2,
+      "rsi_14": 55,
+      "signal_summary": "neutral",
+      "analyst_rating": "buy"
     }
   ]
 }
+```
+
+## 🚦 Trading Signals Output
+
+```
+================================================================================
+  🚦 TRADING SIGNALS DETECTED
+================================================================================
+
+📈 BULLISH SIGNALS (12 stocks):
+   EMBR3    Embraer              RSI:    58 | YTD: +150.2%
+   BPAC11   BTG Pactual          RSI:    52 | YTD:  +45.3%
+
+📉 BEARISH SIGNALS (8 stocks):
+   CSAN3    Cosan                RSI:    42 | YTD:  -55.2%
+   AZUL4    Azul                 RSI:    35 | YTD:  -78.1%
+
+🟢 RSI OVERSOLD (<30) - Potential buy (3 stocks):
+   PCAR3    RSI:    28
+   BHIA3    RSI:    25
+
+🔴 RSI OVERBOUGHT (>70) - Potential sell (2 stocks):
+   NVDA     RSI:    72
+   META     RSI:    71
+
+⬆️ NEAR 52-WEEK HIGH (within 5%) (5 stocks):
+   WEGE3    WEG
+   EMBR3    Embraer
+
+✨ GOLDEN CROSS (MA50 > MA200) (45 stocks):
+   ITUB4    Itaú Unibanco PN
+   BBAS3    Banco do Brasil
+================================================================================
 ```
 
 ## ⚙️ Configuração
@@ -153,9 +273,14 @@ environment:
 Edite `src/assets.py`:
 
 ```python
+# Ações brasileiras
 IBOVESPA_STOCKS = {
-    # Adicione aqui
     "NOVO3.SA": {"name": "Nova Empresa", "sector": "Setor"},
+}
+
+# Ações americanas (sem .SA)
+US_STOCKS = {
+    "TSLA": {"name": "Tesla", "sector": "Automotive"},
 }
 ```
 
@@ -166,6 +291,27 @@ pip install -r requirements.txt
 python src/main.py --once
 ```
 
+### Comandos úteis de desenvolvimento
+
+```bash
+# Atualizar apenas cotações
+docker compose run --rm runner python src/main.py --once
+
+# Ver análise AI com benchmarks
+docker compose run --rm runner python src/main.py --ai
+
+# Verificar sinais de trading
+docker compose run --rm runner python src/main.py --signals
+
+# Exportar para análise
+docker compose run --rm runner python src/main.py --export --json
+```
+
 ## 📝 Licença
 
 MIT
+
+---
+
+Desenvolvido para análise de investimentos no mercado brasileiro e americano. 
+Use por sua conta e risco - dados são informativos e não constituem recomendação de investimento.
