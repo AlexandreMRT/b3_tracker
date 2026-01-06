@@ -11,6 +11,46 @@ from sqlalchemy import func
 from database import SessionLocal
 from models import Asset, Quote
 
+# Lazy import for polymarket to avoid circular imports
+def get_polymarket_sentiment():
+    """Safely import and fetch polymarket sentiment"""
+    try:
+        from polymarket import fetch_polymarket_sentiment, aggregate_sentiment
+        asset_markets = fetch_polymarket_sentiment()
+        return asset_markets
+    except Exception as e:
+        print(f"⚠️ Polymarket não disponível: {e}")
+        return {}
+
+
+def _get_polymarket_for_report() -> dict:
+    """Get Polymarket data formatted for AI report"""
+    try:
+        from polymarket import fetch_polymarket_sentiment, aggregate_sentiment
+        asset_markets = fetch_polymarket_sentiment()
+        
+        result = {}
+        for asset_key, markets in asset_markets.items():
+            agg = aggregate_sentiment(markets)
+            result[asset_key] = {
+                "score": agg.get("score"),
+                "label": agg.get("label"),
+                "confidence": agg.get("confidence"),
+                "market_count": agg.get("market_count"),
+                "total_volume_24h": agg.get("total_volume"),
+                "top_markets": [
+                    {
+                        "question": m.get("question"),
+                        "probability": m.get("yes_probability"),
+                        "volume_24h": m.get("volume_24h"),
+                    }
+                    for m in markets[:3]
+                ]
+            }
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
 
 EXPORTS_PATH = os.environ.get("EXPORTS_PATH", "/app/exports")
 
@@ -866,6 +906,40 @@ def export_human_report(filename: Optional[str] = None) -> str:
                 lines.append(f"  - *\"{headline}\"*")
         lines.append("")
     
+    # Polymarket Prediction Markets
+    lines.append("## 🎯 Polymarket Prediction Markets")
+    lines.append("")
+    
+    try:
+        from polymarket import fetch_polymarket_sentiment, aggregate_sentiment
+        asset_markets = fetch_polymarket_sentiment()
+        
+        if asset_markets:
+            for asset_key, markets in sorted(asset_markets.items()):
+                if not markets:
+                    continue
+                agg = aggregate_sentiment(markets)
+                label = agg.get('label', 'N/A')
+                score = agg.get('score')
+                score_str = f"{score:+.2f}" if score else "N/A"
+                
+                label_emoji = {"bullish": "🟢", "bearish": "🔴", "neutral": "⚪"}.get(label, "❓")
+                lines.append(f"### {label_emoji} {asset_key} ({label.upper()} {score_str})")
+                
+                for m in markets[:2]:
+                    prob = m.get('yes_probability')
+                    prob_str = f"{prob*100:.0f}%" if prob else "N/A"
+                    vol = m.get('volume_24h') or 0
+                    lines.append(f"- **[{prob_str}]** {m.get('question', 'N/A')[:60]}...")
+                    lines.append(f"  - Volume: ${vol:,.0f}")
+                lines.append("")
+        else:
+            lines.append("*Sem dados de prediction markets disponíveis*")
+            lines.append("")
+    except Exception as e:
+        lines.append(f"*Polymarket indisponível: {e}*")
+        lines.append("")
+    
     # Footer
     lines.append("---")
     lines.append(f"*Gerado em {data['generated_at'].strftime('%Y-%m-%d %H:%M:%S')} por B3 Tracker*")
@@ -970,6 +1044,7 @@ def export_ai_report(filename: Optional[str] = None) -> str:
                 if r.get('var_ytd', 0) and r['var_ytd'] > 20
             ][:10],
         },
+        "polymarket_sentiment": _get_polymarket_for_report(),
         "full_data": data['all_data'],
     }
     

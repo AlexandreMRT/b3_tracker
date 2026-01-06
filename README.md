@@ -14,6 +14,7 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 - 📉 **Indicadores técnicos** - RSI-14, MA50, MA200, golden/death cross
 - 🚦 **Trading signals** - Detecção automática de sinais bullish/bearish
 - 📰 **News sentiment** - Análise de sentimento de notícias (PT-BR e EN)
+- 🔮 **Polymarket sentiment** - Dados de mercados de previsão (cripto, macro, geopolítica)
 - 🤖 **AI-ready exports** - JSON otimizado para modelos de machine learning
 
 ## 🚀 Quick Start
@@ -52,7 +53,8 @@ docker compose down
 | `python src/main.py --summary` | Mostra resumo das cotações no terminal |
 | `python src/main.py --signals` | Mostra sinais de trading detectados |
 | `python src/main.py --news` | Mostra análise de sentimento de notícias |
-| `python src/main.py --ai` | Mostra análise AI + sinais + news |
+| `python src/main.py --polymarket` | Mostra sentimento do Polymarket |
+| `python src/main.py --ai` | Mostra análise AI + sinais + news + Polymarket |
 | `python src/main.py --report` | Gera relatórios Human (MD) + AI (JSON) |
 
 ## 📄 Relatórios Consolidados
@@ -65,6 +67,7 @@ Arquivo `exports/report_YYYY-MM-DD.md` com:
 - 🔥 **Top Movers** - Maiores altas/quedas do dia
 - 🚦 **Trading Signals** - RSI oversold/overbought, máximas/mínimas 52w
 - 📰 **News Sentiment** - Notícias positivas/negativas recentes
+- 🔮 **Polymarket Sentiment** - Sentimento de mercados de previsão (cripto, macro, geopolítica)
 
 ### AI Report (JSON)
 Arquivo `exports/ai_report_YYYY-MM-DD.json` com:
@@ -73,6 +76,7 @@ Arquivo `exports/ai_report_YYYY-MM-DD.json` com:
 - `signals_summary` - Bullish/bearish counts, RSI extremos
 - `top_movers` - Gainers/losers com dados completos
 - `news_sentiment` - Scores e headlines
+- `polymarket_sentiment` - Sentimento de mercados de previsão por categoria
 - `actionable_insights` - Listas de potential_buys, potential_sells, momentum_stocks
 - `full_data` - Dados completos de todos os 104 ativos
 

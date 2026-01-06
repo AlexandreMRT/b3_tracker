@@ -9,6 +9,7 @@ Uso:
     python main.py --summary    # Mostra resumo das cotações
     python main.py --signals    # Mostra sinais de trading detectados
     python main.py --news       # Mostra análise de sentimento de notícias
+    python main.py --polymarket # Mostra sentimento do Polymarket
     python main.py --ai         # Análise detalhada para AI com sinais e news
     python main.py --report     # Gera relatórios Human (MD) e AI (JSON)
 """
@@ -90,6 +91,17 @@ def main():
         print_ai_analysis()
         print_signals()
         print_news_sentiment()
+        # Include Polymarket in AI analysis
+        from polymarket import fetch_polymarket_sentiment, print_polymarket_summary
+        asset_markets = fetch_polymarket_sentiment()
+        print_polymarket_summary(asset_markets)
+    
+    elif "--polymarket" in args or "-p" in args:
+        # Mostrar sentimento do Polymarket
+        print("🎯 Modo: Polymarket Prediction Markets\n")
+        from polymarket import fetch_polymarket_sentiment, print_polymarket_summary
+        asset_markets = fetch_polymarket_sentiment()
+        print_polymarket_summary(asset_markets)
     
     elif "--report" in args or "-r" in args:
         # Gerar relatórios Human (Markdown) e AI (JSON)
