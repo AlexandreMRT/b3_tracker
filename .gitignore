@@ -15,6 +15,7 @@ data/*.sqlite
 # Exports (manter pasta, ignorar arquivos)
 exports/*.csv
 exports/*.json
+exports/*.md
 
 # IDE
 .idea/

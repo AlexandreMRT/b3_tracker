@@ -95,7 +95,7 @@ IBOVESPA_STOCKS = {
     
     # Indústria
     "WEGE3.SA": {"name": "WEG", "sector": "Industrial"},
-    "EMBR3.SA": {"name": "Embraer", "sector": "Aeronáutica"},
+    "EMBJ3.SA": {"name": "Embraer", "sector": "Aeronáutica"},  # Was EMBR3 until 2025
     "RAIL3.SA": {"name": "Rumo", "sector": "Logística"},
     # CCRO3 renamed to Motiva in 2024
     "ECOR3.SA": {"name": "Ecorodovias", "sector": "Concessões"},
