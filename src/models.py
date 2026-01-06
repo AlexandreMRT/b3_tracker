@@ -139,6 +139,15 @@ class Quote(Base):
     news_headline_en = Column(String(500), nullable=True)  # Latest English headline
     news_sentiment_label = Column(String(20), nullable=True)  # positive/negative/neutral
     
+    # === POLYMARKET PREDICTION MARKETS ===
+    polymarket_score = Column(Float, nullable=True)           # Aggregated sentiment (-1 to +1)
+    polymarket_label = Column(String(20), nullable=True)      # bullish/bearish/neutral
+    polymarket_confidence = Column(Float, nullable=True)      # Confidence (0-1 based on volume)
+    polymarket_market_count = Column(Integer, nullable=True)  # Number of relevant markets
+    polymarket_volume = Column(Float, nullable=True)          # Total 24h volume
+    polymarket_top_question = Column(String(500), nullable=True)  # Top market question
+    polymarket_top_probability = Column(Float, nullable=True)     # Top market probability
+    
     quote_date = Column(DateTime, nullable=False)  # Data da cotação
     fetched_at = Column(DateTime, default=datetime.utcnow)  # Quando foi buscado
     
