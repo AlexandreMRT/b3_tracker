@@ -472,12 +472,14 @@ def print_signals():
         if bullish:
             print(f"\n📈 BULLISH SIGNALS ({len(bullish)} stocks):")
             for r in bullish[:10]:
-                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {r.get('var_ytd', 0):>+6.1f}%")
+                ytd = r.get('var_ytd') or 0
+                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {ytd:>+6.1f}%")
         
         if bearish:
             print(f"\n📉 BEARISH SIGNALS ({len(bearish)} stocks):")
             for r in bearish[:10]:
-                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {r.get('var_ytd', 0):>+6.1f}%")
+                ytd = r.get('var_ytd') or 0
+                print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {ytd:>+6.1f}%")
         
         if oversold:
             print(f"\n🟢 RSI OVERSOLD (<30) - Potential buy ({len(oversold)} stocks):")
