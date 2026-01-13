@@ -5,8 +5,9 @@
 ## 📊 Current State (v1.0)
 
 ### Implemented Features
-- [x] 104 assets tracked (77 BR stocks, 20 US stocks, 4 commodities, 2 crypto)
-- [x] Parallel fetch with ThreadPoolExecutor (8 workers, ~30s for all assets)
+- [x] 128 assets tracked (106 BR stocks, 20 US stocks, 4 commodities, 2 crypto)
+- [x] Parallel fetch with ThreadPoolExecutor (8 workers, ~48s for all assets)
+- [x] Polymarket sentiment integration (crypto, macro, geopolitical markets)
 - [x] Technical indicators: RSI-14, MA50, MA200, golden/death cross
 - [x] Fundamental data: P/E, P/B, dividend yield, beta, ROE, market cap
 - [x] Trading signals: 10 types (oversold, overbought, trends, volume spikes)
@@ -127,34 +128,152 @@ Free forever VM with:
 
 ## 🔮 Future Features (Backlog)
 
-### 5. Portfolio Tracking 💼
-**Priority: MEDIUM | Effort: HIGH**
+### 5. Multi-User System with Google OAuth 👥
+**Priority: HIGH | Effort: HIGH**
 
-Track personal portfolio:
-- Add positions: ticker, quantity, avg price, date
-- Calculate total return, IRR
-- Compare vs IBOV/S&P 500
-- Dividend tracking
+Transform into multi-user platform:
+- Google OAuth 2.0 authentication
+- User registration and profile management
+- Personal watchlists and portfolios
+- Privacy: users see only their own data
+
+**Architecture changes required:**
+- **Database upgrade**: Migrate from SQLite to PostgreSQL
+  - Better concurrent write handling
+  - JSONB support for flexible data
+  - Row-level security for data isolation
+  - Scalability for multiple users
+- **Authentication layer**: OAuth 2.0 with Google
+  - Libraries: `authlib` or `FastAPI-Users`
+  - Session management with JWT tokens
+  - Secure cookie handling
+- **API changes**: Add user context to all endpoints
+  - `/api/users/me` - Get current user profile
+  - `/api/users/me/portfolio` - User's portfolio
+  - `/api/users/me/watchlist` - User's watchlist
+  - Protected routes with OAuth middleware
 
 **Data model:**
 ```python
-class Position:
-    ticker: str
-    quantity: float
-    avg_price: float
-    purchase_date: date
+class User:
+    id: UUID (primary key)
+    google_id: str (unique)
+    email: str
+    name: str
+    picture_url: str
+    created_at: datetime
+    last_login: datetime
     
-class Transaction:
+class Watchlist:
+    id: int
+    user_id: UUID (foreign key)
     ticker: str
-    type: buy | sell | dividend
-    quantity: float
-    price: float
-    date: datetime
+    created_at: datetime
 ```
+
+**Database choice:**
+- ✅ **PostgreSQL** (RECOMMENDED)
+  - Free tier: Supabase (500MB), Neon (3GB), Railway
+  - Excellent multi-user support
+  - ACID compliance, concurrent writes
+  - JSON support for flexible schemas
+  - Can be containerized with docker-compose
+- ⚠️ **SQLite** (NOT recommended for multi-user)
+  - Single-writer limitation
+  - No built-in user management
+  - OK for single-user only
+
+**Docker Compose changes:**
+```yaml
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: b3tracker
+      POSTGRES_USER: b3user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+  app:
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://b3user:${DB_PASSWORD}@db:5432/b3tracker
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+```
+
+**Files to create/modify:**
+- `src/auth.py` (new - OAuth logic)
+- `src/users.py` (new - user management)
+- `src/database.py` (modify - PostgreSQL instead of SQLite)
+- `src/models.py` (add User, Watchlist models)
+- `src/api.py` (add protected routes)
+- `docker-compose.yml` (add PostgreSQL service)
+- `requirements.txt` (add authlib, psycopg2-binary, sqlalchemy[postgresql])
+- `alembic/` (new - database migrations)
 
 ---
 
-### 6. Backtesting Engine 🧪
+### 6. Portfolio Tracking 💼
+**Priority: HIGH | Effort: MEDIUM** (requires Multi-User System #5)
+
+Track personal portfolio with multi-user support:
+- Add/edit positions: ticker, quantity, avg price, date
+- Calculate total return, IRR, profit/loss
+- Compare vs IBOV/S&P 500
+- Dividend tracking and yield calculation
+- Historical performance charts
+- Portfolio diversification analysis
+
+**Data model:**
+```python
+class Portfolio:
+    id: int
+    user_id: UUID (foreign key to User)
+    name: str  # e.g., "Main Portfolio", "Long-term", "Day Trading"
+    created_at: datetime
+    
+class Position:
+    id: int
+    portfolio_id: int (foreign key)
+    ticker: str
+    quantity: float
+    avg_price: float  # in BRL
+    purchase_date: date
+    notes: str (optional)
+    
+class Transaction:
+    id: int
+    portfolio_id: int (foreign key)
+    ticker: str
+    type: buy | sell | dividend
+    quantity: float
+    price: float  # in BRL
+    fees: float
+    date: datetime
+    notes: str (optional)
+```
+
+**API endpoints:**
+- `POST /api/portfolio` - Create portfolio
+- `GET /api/portfolio/{id}` - Get portfolio details
+- `POST /api/portfolio/{id}/positions` - Add position
+- `PUT /api/portfolio/{id}/positions/{position_id}` - Update position
+- `DELETE /api/portfolio/{id}/positions/{position_id}` - Remove position
+- `POST /api/portfolio/{id}/transactions` - Add transaction
+- `GET /api/portfolio/{id}/performance` - Calculate returns
+
+**Files to create/modify:**
+- `src/portfolio.py` (new - portfolio logic)
+- `src/models.py` (add Portfolio, Position, Transaction)
+- `src/api.py` (add portfolio endpoints)
+- Frontend: Portfolio dashboard page
+
+---
+
+### 7. Backtesting Engine 🧪
 **Priority: LOW | Effort: HIGH**
 
 Test signal effectiveness historically:
@@ -164,7 +283,7 @@ Test signal effectiveness historically:
 
 ---
 
-### 7. Graham Valuation Multiples 📐
+### 8. Graham Valuation Multiples 📐
 **Priority: LOW | Effort: LOW**
 
 Add Benjamin Graham valuation:
@@ -178,7 +297,7 @@ Add Benjamin Graham valuation:
 
 ---
 
-### 8. Sector Correlation Matrix 🔗
+### 9. Sector Correlation Matrix 🔗
 **Priority: LOW | Effort: MEDIUM**
 
 Identify correlated assets:
@@ -188,7 +307,7 @@ Identify correlated assets:
 
 ---
 
-### 9. Insider Trading Alerts 👔
+### 10. Insider Trading Alerts 👔
 **Priority: LOW | Effort: HIGH**
 
 Monitor CVM filings for insider transactions:
@@ -255,8 +374,9 @@ Use this prompt to continue development:
 I'm working on B3 Tracker, a stock market tracking application.
 
 Current state:
-- 104 assets (BR stocks, US stocks, commodities, crypto)
-- Parallel fetch (~30s for all)
+- 128 assets (106 BR + 20 US stocks + 4 commodities + 2 crypto)
+- Parallel fetch (~48s for all)
+- Polymarket sentiment integration
 - Technical indicators, fundamentals, news sentiment
 - REST API with FastAPI
 - Docker Compose setup
@@ -290,4 +410,4 @@ curl http://localhost:8000/api/signals
 
 ---
 
-*Last updated: 2025-12-27*
+*Last updated: 2026-01-12*

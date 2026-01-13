@@ -2,10 +2,11 @@
 B3 Tracker - REST API
 FastAPI server for accessing market data, signals, and reports
 """
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.openapi.utils import get_openapi
+from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
 import os
@@ -14,12 +15,38 @@ import sys
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from database import SessionLocal, init_db
-from models import Asset, Quote
+from database import SessionLocal, init_db, get_db
+from models import Asset, Quote, User, TransactionType
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+# Import authentication and business logic
+from auth import oauth, create_access_token, get_current_user, get_or_create_user
+from users import (
+    get_user_watchlist, add_to_watchlist, remove_from_watchlist,
+    update_user_preferences
+)
+from portfolio import (
+    get_user_portfolios, get_portfolio_by_id, create_portfolio,
+    update_portfolio, delete_portfolio, get_portfolio_positions,
+    get_portfolio_transactions, add_transaction, delete_transaction,
+    calculate_portfolio_performance, calculate_position_performance,
+    get_position_by_ticker
+)
 
 # Initialize database
 init_db()
+
+# === REQUEST/RESPONSE MODELS ===
+
+class TransactionRequest(BaseModel):
+    ticker: str
+    transaction_type: str
+    quantity: float
+    price_brl: float
+    fees_brl: float = 0.0
+    transaction_date: Optional[datetime] = None
+    notes: Optional[str] = None
 
 # API Description
 API_DESCRIPTION = """
@@ -71,6 +98,22 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_tags=[
         {
+            "name": "Sistema",
+            "description": "Health check e operações do sistema"
+        },
+        {
+            "name": "Autenticação",
+            "description": "Login com Google OAuth 2.0 e gerenciamento de sessão"
+        },
+        {
+            "name": "Watchlist",
+            "description": "Gerenciar lista de ativos observados"
+        },
+        {
+            "name": "Portfolio",
+            "description": "Gerenciar portfolios, posições e transações"
+        },
+        {
             "name": "Cotações",
             "description": "Endpoints para consulta de cotações e dados de ativos"
         },
@@ -85,10 +128,6 @@ app = FastAPI(
         {
             "name": "Análise",
             "description": "Relatórios e análises consolidadas"
-        },
-        {
-            "name": "Sistema",
-            "description": "Health check e operações do sistema"
         },
     ],
     contact={
@@ -701,6 +740,373 @@ async def get_movers(
         }
     finally:
         db.close()
+
+
+# =============================================================================
+# AUTHENTICATION ENDPOINTS
+# =============================================================================
+
+@app.get("/auth/login", tags=["Autenticação"], summary="Iniciar login com Google")
+async def login_google(request: Request):
+    """Redirect to Google OAuth login page"""
+    redirect_uri = request.url_for('auth_callback')
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/auth/callback", tags=["Autenticação"], summary="Callback do Google OAuth")
+async def auth_callback(request: Request, db: Session = Depends(get_db)):
+    """Handle Google OAuth callback and create JWT token"""
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get('userinfo')
+        
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Failed to get user info")
+        
+        # Get or create user
+        user = get_or_create_user(
+            db=db,
+            google_id=user_info['sub'],
+            email=user_info['email'],
+            name=user_info.get('name', user_info['email']),
+            picture_url=user_info.get('picture')
+        )
+        
+        # Create JWT token
+        access_token = create_access_token(data={"sub": str(user.id)})
+        
+        # Return token (in production, you'd redirect to frontend with token)
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "name": user.name,
+                "picture_url": user.picture_url
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/auth/me", tags=["Autenticação"], summary="Informações do usuário atual")
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Get current authenticated user info"""
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "name": current_user.name,
+        "picture_url": current_user.picture_url,
+        "default_currency": current_user.default_currency,
+        "created_at": current_user.created_at,
+        "last_login": current_user.last_login
+    }
+
+
+@app.post("/auth/test-login", tags=["Autenticação"], summary="[DEV] Create test user and token")
+async def test_login(email: str = "test@example.com", name: str = "Test User", db: Session = Depends(get_db)):
+    """
+    Development endpoint to create a test user and get a token.
+    REMOVE THIS IN PRODUCTION!
+    """
+    import uuid
+    
+    # Get or create test user
+    user = get_or_create_user(
+        db=db,
+        google_id=f"test_{email}",
+        email=email,
+        name=name,
+        picture_url=None
+    )
+    
+    # Create JWT token
+    access_token = create_access_token(data={"sub": str(user.id)})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name
+        },
+        "message": "⚠️ This is a development endpoint. Remove in production!"
+    }
+
+
+# =============================================================================
+# WATCHLIST ENDPOINTS
+# =============================================================================
+
+@app.get("/api/watchlist", tags=["Watchlist"], summary="Obter watchlist do usuário")
+async def get_watchlist(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get user's watchlist"""
+    watchlist = get_user_watchlist(db, str(current_user.id))
+    return {"watchlist": [{"ticker": w.ticker, "notes": w.notes, "created_at": w.created_at} for w in watchlist]}
+
+
+@app.post("/api/watchlist/{ticker}", tags=["Watchlist"], summary="Adicionar ativo à watchlist")
+async def add_ticker_to_watchlist(
+    ticker: str,
+    notes: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add ticker to watchlist"""
+    watchlist = add_to_watchlist(db, str(current_user.id), ticker, notes)
+    return {"message": f"{ticker} added to watchlist", "watchlist": {"ticker": watchlist.ticker, "notes": watchlist.notes}}
+
+
+@app.delete("/api/watchlist/{ticker}", tags=["Watchlist"], summary="Remover ativo da watchlist")
+async def remove_ticker_from_watchlist(
+    ticker: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Remove ticker from watchlist"""
+    success = remove_from_watchlist(db, str(current_user.id), ticker)
+    if not success:
+        raise HTTPException(status_code=404, detail="Ticker not found in watchlist")
+    return {"message": f"{ticker} removed from watchlist"}
+
+
+# =============================================================================
+# PORTFOLIO ENDPOINTS
+# =============================================================================
+
+@app.get("/api/portfolios", tags=["Portfolio"], summary="Listar portfolios do usuário")
+async def list_portfolios(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all user's portfolios"""
+    portfolios = get_user_portfolios(db, str(current_user.id))
+    return {
+        "portfolios": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "is_default": p.is_default == 1,
+                "created_at": p.created_at,
+                "positions_count": len(p.positions)
+            }
+            for p in portfolios
+        ]
+    }
+
+
+@app.post("/api/portfolios", tags=["Portfolio"], summary="Criar novo portfolio")
+async def create_new_portfolio(
+    name: str,
+    description: Optional[str] = None,
+    is_default: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new portfolio"""
+    portfolio = create_portfolio(db, str(current_user.id), name, description, is_default)
+    return {
+        "message": "Portfolio created successfully",
+        "portfolio": {
+            "id": portfolio.id,
+            "name": portfolio.name,
+            "description": portfolio.description,
+            "is_default": portfolio.is_default == 1
+        }
+    }
+
+
+@app.get("/api/portfolios/{portfolio_id}", tags=["Portfolio"], summary="Obter detalhes do portfolio")
+async def get_portfolio_details(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get portfolio details"""
+    portfolio = get_portfolio_by_id(db, portfolio_id, str(current_user.id))
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    return {
+        "id": portfolio.id,
+        "name": portfolio.name,
+        "description": portfolio.description,
+        "is_default": portfolio.is_default == 1,
+        "created_at": portfolio.created_at,
+        "updated_at": portfolio.updated_at,
+        "positions_count": len(portfolio.positions),
+        "transactions_count": len(portfolio.transactions)
+    }
+
+
+@app.put("/api/portfolios/{portfolio_id}", tags=["Portfolio"], summary="Atualizar portfolio")
+async def update_portfolio_details(
+    portfolio_id: int,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    is_default: Optional[bool] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update portfolio details"""
+    portfolio = update_portfolio(db, portfolio_id, str(current_user.id), name, description, is_default)
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    return {"message": "Portfolio updated successfully"}
+
+
+@app.delete("/api/portfolios/{portfolio_id}", tags=["Portfolio"], summary="Deletar portfolio")
+async def delete_portfolio_endpoint(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a portfolio"""
+    success = delete_portfolio(db, portfolio_id, str(current_user.id))
+    if not success:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    return {"message": "Portfolio deleted successfully"}
+
+
+@app.get("/api/portfolios/{portfolio_id}/positions", tags=["Portfolio"], summary="Obter posições do portfolio")
+async def get_positions(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all positions in a portfolio"""
+    portfolio = get_portfolio_by_id(db, portfolio_id, str(current_user.id))
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    positions = get_portfolio_positions(db, portfolio_id)
+    positions_with_performance = []
+    
+    for position in positions:
+        perf = calculate_position_performance(db, position)
+        if perf:
+            positions_with_performance.append(perf)
+    
+    return {"positions": positions_with_performance}
+
+
+@app.get("/api/portfolios/{portfolio_id}/performance", tags=["Portfolio"], summary="Calcular performance do portfolio")
+async def get_portfolio_performance(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get portfolio performance metrics"""
+    portfolio = get_portfolio_by_id(db, portfolio_id, str(current_user.id))
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    performance = calculate_portfolio_performance(db, portfolio_id)
+    return performance
+
+
+@app.post("/api/portfolios/{portfolio_id}/transactions", tags=["Portfolio"], summary="Adicionar transação")
+async def add_new_transaction(
+    portfolio_id: int,
+    transaction_data: TransactionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add a new transaction to portfolio"""
+    # Verify portfolio ownership
+    portfolio = get_portfolio_by_id(db, portfolio_id, str(current_user.id))
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    # Validate transaction type
+    try:
+        trans_type = TransactionType[transaction_data.transaction_type.upper()]
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Invalid transaction type: {transaction_data.transaction_type}")
+    
+    transaction = add_transaction(
+        db=db,
+        portfolio_id=portfolio_id,
+        ticker=transaction_data.ticker,
+        transaction_type=trans_type,
+        quantity=transaction_data.quantity,
+        price_brl=transaction_data.price_brl,
+        fees_brl=transaction_data.fees_brl,
+        transaction_date=transaction_data.transaction_date,
+        notes=transaction_data.notes
+    )
+    
+    return {
+        "message": "Transaction added successfully",
+        "transaction": {
+            "id": transaction.id,
+            "ticker": transaction.ticker,
+            "type": transaction.transaction_type.value,
+            "quantity": transaction.quantity,
+            "price_brl": transaction.price_brl,
+            "total_brl": transaction.total_brl,
+            "transaction_date": transaction.transaction_date
+        }
+    }
+
+
+@app.get("/api/portfolios/{portfolio_id}/transactions", tags=["Portfolio"], summary="Listar transações")
+async def list_transactions(
+    portfolio_id: int,
+    limit: int = 100,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all transactions for a portfolio"""
+    portfolio = get_portfolio_by_id(db, portfolio_id, str(current_user.id))
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    transactions = get_portfolio_transactions(db, portfolio_id, limit)
+    
+    return {
+        "transactions": [
+            {
+                "id": t.id,
+                "ticker": t.ticker,
+                "type": t.transaction_type.value,
+                "quantity": t.quantity,
+                "price_brl": t.price_brl,
+                "total_brl": t.total_brl,
+                "fees_brl": t.fees_brl,
+                "transaction_date": t.transaction_date,
+                "notes": t.notes
+            }
+            for t in transactions
+        ]
+    }
+
+
+@app.delete("/api/portfolios/{portfolio_id}/transactions/{transaction_id}", tags=["Portfolio"], summary="Deletar transação")
+async def delete_transaction_endpoint(
+    portfolio_id: int,
+    transaction_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a transaction"""
+    portfolio = get_portfolio_by_id(db, portfolio_id, str(current_user.id))
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    success = delete_transaction(db, transaction_id, portfolio_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    return {"message": "Transaction deleted successfully"}
 
 
 # =============================================================================

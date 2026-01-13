@@ -1,7 +1,29 @@
 services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: b3_postgres
+    environment:
+      POSTGRES_DB: b3tracker
+      POSTGRES_USER: b3user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-b3tracker_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # External:Internal - avoiding conflict with local PostgreSQL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U b3user -d b3tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     container_name: b3_tracker
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./exports:/app/exports
@@ -10,12 +32,19 @@ services:
       - TZ=America/Sao_Paulo
       - SCHEDULE_ENABLED=true
       - SCHEDULE_TIME=18:00
+      - DATABASE_URL=postgresql://b3user:${DB_PASSWORD:-b3tracker_dev_password}@db:5432/b3tracker
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SECRET_KEY=${SECRET_KEY:-dev_secret_key_change_in_production}
     restart: unless-stopped
 
   # REST API server
   api:
     build: .
     container_name: b3_api
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
@@ -24,6 +53,11 @@ services:
       - ./src:/app/src
     environment:
       - TZ=America/Sao_Paulo
+      - DATABASE_URL=postgresql://b3user:${DB_PASSWORD:-b3tracker_dev_password}@db:5432/b3tracker
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SECRET_KEY=${SECRET_KEY:-dev_secret_key_change_in_production}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI:-http://localhost:8000/auth/callback}
     command: python -m uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
@@ -31,11 +65,18 @@ services:
   runner:
     build: .
     container_name: b3_runner
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./exports:/app/exports
       - ./src:/app/src
     environment:
       - TZ=America/Sao_Paulo
+      - DATABASE_URL=postgresql://b3user:${DB_PASSWORD:-b3tracker_dev_password}@db:5432/b3tracker
     profiles:
       - tools
+
+volumes:
+  postgres_data:
