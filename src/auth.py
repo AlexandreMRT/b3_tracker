@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2AuthorizationCodeBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from authlib.integrations.starlette_client import OAuth
@@ -21,11 +21,8 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 OAUTH_REDIRECT_URI = os.environ.get("OAUTH_REDIRECT_URI", "http://localhost:8000/auth/callback")
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2AuthorizationCodeBearer(
-    authorizationUrl="https://accounts.google.com/o/oauth2/auth",
-    tokenUrl="https://oauth2.googleapis.com/token"
-)
+# Bearer token scheme for Swagger UI
+security = HTTPBearer()
 
 # OAuth client setup
 oauth = OAuth()
@@ -69,10 +66,11 @@ def verify_token(token: str) -> dict:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """Get current authenticated user from JWT token"""
+    token = credentials.credentials
     payload = verify_token(token)
     user_id: str = payload.get("sub")
     
@@ -143,14 +141,14 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
 
 # Optional: Get current user but allow None (for optional authentication)
 def get_current_user_optional(
-    token: Optional[str] = Depends(oauth2_scheme),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> Optional[User]:
     """Get current user if authenticated, otherwise return None"""
-    if not token:
+    if not credentials:
         return None
     
     try:
-        return get_current_user(token, db)
+        return get_current_user(credentials, db)
     except HTTPException:
         return None

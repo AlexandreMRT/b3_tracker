@@ -18,12 +18,19 @@
 - [x] REST API: FastAPI with Swagger UI (port 8000)
 - [x] Reports: Human (Markdown) + AI (JSON) consolidated reports
 - [x] Docker Compose: app (scheduler), api (REST), runner (CLI)
+- [x] Multi-user system with Google OAuth 2.0
+- [x] PostgreSQL database with user authentication
+- [x] Portfolio tracking with positions and transactions
+- [x] P&L calculations, dividends, IRR tracking
+- [x] Watchlist per user
+- [x] 36 authenticated API endpoints
 
 ### Tech Stack
 - Python 3.11
-- SQLite with SQLAlchemy 2.0
+- PostgreSQL with SQLAlchemy 2.0
 - yfinance for market data
 - FastAPI + uvicorn for REST API
+- Google OAuth 2.0 with JWT tokens
 - NLTK VADER for sentiment analysis
 - feedparser for Google News RSS
 - Docker Compose for orchestration
@@ -32,7 +39,67 @@
 
 ## 🎯 Priority Features (Next Up)
 
-### 1. Telegram Bot 🔔
+### 1. Web Frontend Dashboard 🖥️
+**Priority: CRITICAL | Effort: HIGH**
+
+Create a modern web interface for portfolio management:
+- Dashboard with portfolio overview and performance charts
+- Add/edit/delete portfolios
+- Record transactions (buy/sell/dividend)
+- View positions with real-time P&L
+- Manage watchlist (add/remove tickers)
+- View market data for tracked assets
+- Responsive design (mobile-friendly)
+
+**Implementation notes:**
+- Option A: React/Vue/Svelte SPA with separate API calls
+- Option B: Server-side rendered with Jinja2 templates (simpler, faster to implement)
+- Use Chart.js or Plotly for visualizations
+- Integrate with existing authentication (OAuth + JWT)
+- Store static files in `src/static/` and templates in `src/templates/`
+
+**Files to create/modify:**
+- `src/templates/dashboard.html` (main dashboard)
+- `src/templates/portfolio.html` (portfolio detail view)
+- `src/templates/transactions.html` (transaction history)
+- `src/static/css/style.css` (styling)
+- `src/static/js/app.js` (frontend logic)
+- `src/api.py` (add HTML rendering routes)
+
+---
+
+### 2. Test Suite 🧪
+**Priority: HIGH | Effort: MEDIUM**
+
+Implement comprehensive testing to ensure reliability:
+- Unit tests for business logic (portfolio calculations, signals)
+- Integration tests for API endpoints
+- Database tests with test fixtures
+- Authentication flow tests
+- End-to-end tests for critical user journeys
+
+**Implementation notes:**
+- Use pytest as test framework
+- pytest-asyncio for async tests
+- Factory Boy for test data generation
+- Separate test database (PostgreSQL or SQLite in-memory)
+- GitHub Actions for CI/CD
+- Target: 80%+ code coverage
+
+**Files to create:**
+- `tests/__init__.py`
+- `tests/conftest.py` (pytest fixtures)
+- `tests/test_auth.py` (OAuth and JWT tests)
+- `tests/test_portfolio.py` (portfolio logic tests)
+- `tests/test_api.py` (API endpoint tests)
+- `tests/test_database.py` (model tests)
+- `tests/factories.py` (test data factories)
+- `.github/workflows/tests.yml` (CI pipeline)
+- `requirements-dev.txt` (test dependencies)
+
+---
+
+### 3. Telegram Bot 🔔
 **Priority: HIGH | Effort: MEDIUM**
 
 Notify user when important events happen:

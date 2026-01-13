@@ -4,8 +4,10 @@ FastAPI server for accessing market data, signals, and reports
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.openapi.utils import get_openapi
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
@@ -21,7 +23,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 # Import authentication and business logic
-from auth import oauth, create_access_token, get_current_user, get_or_create_user
+from auth import oauth, create_access_token, get_current_user, get_or_create_user, OAUTH_REDIRECT_URI
 from users import (
     get_user_watchlist, add_to_watchlist, remove_from_watchlist,
     update_user_preferences
@@ -138,6 +140,10 @@ app = FastAPI(
         "name": "MIT",
     },
 )
+
+# Session middleware - required for OAuth
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 # CORS middleware - allow all origins for development
 app.add_middleware(
@@ -746,11 +752,20 @@ async def get_movers(
 # AUTHENTICATION ENDPOINTS
 # =============================================================================
 
+@app.get("/login", response_class=HTMLResponse, include_in_schema=False)
+async def login_page():
+    """Serve the login page"""
+    try:
+        with open("/app/src/templates/login.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>Login page not found</h1>", status_code=404)
+
+
 @app.get("/auth/login", tags=["Autenticação"], summary="Iniciar login com Google")
 async def login_google(request: Request):
     """Redirect to Google OAuth login page"""
-    redirect_uri = request.url_for('auth_callback')
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    return await oauth.google.authorize_redirect(request, OAUTH_REDIRECT_URI)
 
 
 @app.get("/auth/callback", tags=["Autenticação"], summary="Callback do Google OAuth")
@@ -775,17 +790,8 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
         # Create JWT token
         access_token = create_access_token(data={"sub": str(user.id)})
         
-        # Return token (in production, you'd redirect to frontend with token)
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "name": user.name,
-                "picture_url": user.picture_url
-            }
-        }
+        # Redirect to login page with token
+        return RedirectResponse(url=f"/login?token={access_token}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
