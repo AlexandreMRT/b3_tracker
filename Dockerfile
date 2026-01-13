@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download NLTK data for sentiment analysis
+RUN python -c "import nltk; nltk.download('vader_lexicon', quiet=True); nltk.download('punkt', quiet=True)"
+
 # Copiar código fonte
 COPY src/ ./src/
 

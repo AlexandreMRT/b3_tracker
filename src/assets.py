@@ -12,11 +12,14 @@ IBOVESPA_STOCKS = {
     "ITUB4.SA": {"name": "Itaú Unibanco PN", "sector": "Bancário"},
     "SANB11.SA": {"name": "Santander Brasil", "sector": "Bancário"},
     "BPAC11.SA": {"name": "BTG Pactual", "sector": "Bancário"},
+    "INBR32.SA": {"name": "Banco Inter", "sector": "Bancário"},
+    "NU": {"name": "Nubank", "sector": "Bancário"},
     "BBSE3.SA": {"name": "BB Seguridade", "sector": "Seguros"},
     "IRBR3.SA": {"name": "IRB Brasil RE", "sector": "Seguros"},
+    "PSSA3.SA": {"name": "Porto Seguro", "sector": "Seguros"},
     # SULA11 merged with Rede D'Or (RDOR3) in 2022
-    "B3SA3.SA": {"name": "B3", "sector": "Serviços Financeiros"},
     # CIEL3 taken private by Bradesco/BB in 2024
+    "B3SA3.SA": {"name": "B3", "sector": "Serviços Financeiros"},
     
     # Holdings
     "ITSA4.SA": {"name": "Itaúsa PN", "sector": "Holding"},
@@ -30,6 +33,7 @@ IBOVESPA_STOCKS = {
     "UGPA3.SA": {"name": "Ultrapar", "sector": "Petróleo e Gás"},
     "CSAN3.SA": {"name": "Cosan", "sector": "Petróleo e Gás"},
     "VBBR3.SA": {"name": "Vibra Energia", "sector": "Petróleo e Gás"},
+    "RAIZ4.SA": {"name": "Raízen", "sector": "Petróleo e Gás"},
     
     # Mineração e Siderurgia
     "VALE3.SA": {"name": "Vale", "sector": "Mineração"},
@@ -41,8 +45,7 @@ IBOVESPA_STOCKS = {
     "CMIN3.SA": {"name": "CSN Mineração", "sector": "Mineração"},
     
     # Energia Elétrica
-    "ELET3.SA": {"name": "Eletrobras ON", "sector": "Energia Elétrica"},
-    "ELET6.SA": {"name": "Eletrobras PNB", "sector": "Energia Elétrica"},
+    # ELET3.SA, ELET6.SA - Eletrobras data unavailable on Yahoo Finance
     "EGIE3.SA": {"name": "Engie Brasil", "sector": "Energia Elétrica"},
     "EQTL3.SA": {"name": "Equatorial", "sector": "Energia Elétrica"},
     "CPFE3.SA": {"name": "CPFL Energia", "sector": "Energia Elétrica"},
@@ -51,9 +54,13 @@ IBOVESPA_STOCKS = {
     "TAEE11.SA": {"name": "Taesa", "sector": "Energia Elétrica"},
     "CPLE3.SA": {"name": "Copel ON", "sector": "Energia Elétrica"},
     "AURE3.SA": {"name": "Auren Energia", "sector": "Energia Elétrica"},
+    "ENEV3.SA": {"name": "Eneva", "sector": "Energia Elétrica"},
+    "NEOE3.SA": {"name": "Neoenergia", "sector": "Energia Elétrica"},
     
     # Saneamento
     "SBSP3.SA": {"name": "Sabesp", "sector": "Saneamento"},
+    "CSMG3.SA": {"name": "Copasa", "sector": "Saneamento"},
+    "SAPR11.SA": {"name": "Sanepar", "sector": "Saneamento"},
     
     # Telecomunicações
     "VIVT3.SA": {"name": "Telefônica Brasil", "sector": "Telecomunicações"},
@@ -68,13 +75,20 @@ IBOVESPA_STOCKS = {
     "PETZ3.SA": {"name": "Petz", "sector": "Varejo"},
     "AZZA3.SA": {"name": "Azzas 2154", "sector": "Varejo"},  # Arezzo + Soma merger
     "LWSA3.SA": {"name": "Locaweb", "sector": "Tecnologia"},
+    "CASH3.SA": {"name": "Méliuz", "sector": "Tecnologia"},
+    "POSI3.SA": {"name": "Positivo", "sector": "Tecnologia"},
     "GMAT3.SA": {"name": "Grupo Mateus", "sector": "Varejo"},  # Replaced Carrefour
     "ASAI3.SA": {"name": "Assaí", "sector": "Varejo"},
     "PCAR3.SA": {"name": "Pão de Açúcar", "sector": "Varejo"},
+    # CRFB3 - Carrefour Brasil data issues
+    # SOMA3 - Grupo Soma data issues (maybe merged with AZZA3?)
+    "ALPA4.SA": {"name": "Alpargatas", "sector": "Varejo"},
+    "GRND3.SA": {"name": "Grendene", "sector": "Varejo"},
+    "VULC3.SA": {"name": "Vulcabras", "sector": "Varejo"},
     
     # Alimentos e Bebidas
     "ABEV3.SA": {"name": "Ambev", "sector": "Bebidas"},
-    # JBSS3, MRFG3, BRFS3 - Yahoo Finance data issues
+    # JBSS3, BRFS3, MRFG3 - Yahoo Finance data issues (API problems)
     "BEEF3.SA": {"name": "Minerva", "sector": "Alimentos"},
     "MDIA3.SA": {"name": "M. Dias Branco", "sector": "Alimentos"},
     "SMTO3.SA": {"name": "São Martinho", "sector": "Açúcar e Álcool"},
@@ -85,24 +99,36 @@ IBOVESPA_STOCKS = {
     "FLRY3.SA": {"name": "Fleury", "sector": "Saúde"},
     "RADL3.SA": {"name": "Raia Drogasil", "sector": "Saúde"},
     "HYPE3.SA": {"name": "Hypera", "sector": "Saúde"},
+    "PNVL3.SA": {"name": "Dasa", "sector": "Saúde"},
+    "QUAL3.SA": {"name": "Qualicorp", "sector": "Saúde"},
+    # GNDI3 merged with Hapvida (now HAPV3)
     
     # Construção Civil e Imobiliário
     "CYRE3.SA": {"name": "Cyrela", "sector": "Construção"},
     "EZTC3.SA": {"name": "EZTEC", "sector": "Construção"},
     "MRVE3.SA": {"name": "MRV", "sector": "Construção"},
+    "TEND3.SA": {"name": "Tenda", "sector": "Construção"},
+    "JHSF3.SA": {"name": "JHSF Participações", "sector": "Construção"},
+    "LAVV3.SA": {"name": "Lavvi", "sector": "Construção"},
     "MULT3.SA": {"name": "Multiplan", "sector": "Shoppings"},
     "IGTI11.SA": {"name": "Iguatemi", "sector": "Shoppings"},
+    # ALSO3 - Aliansce Sonae data issues
+    # BRML3 merged with Aliansce
     
     # Indústria
     "WEGE3.SA": {"name": "WEG", "sector": "Industrial"},
     "EMBJ3.SA": {"name": "Embraer", "sector": "Aeronáutica"},  # Was EMBR3 until 2025
     "RAIL3.SA": {"name": "Rumo", "sector": "Logística"},
-    # CCRO3 renamed to Motiva in 2024
+    # CCRO3 - CCR data issues on Yahoo Finance
     "ECOR3.SA": {"name": "Ecorodovias", "sector": "Concessões"},
     "RENT3.SA": {"name": "Localiza", "sector": "Locação de Veículos"},
     "MOVI3.SA": {"name": "Movida", "sector": "Locação de Veículos"},
     "SUZB3.SA": {"name": "Suzano", "sector": "Papel e Celulose"},
     "KLBN11.SA": {"name": "Klabin", "sector": "Papel e Celulose"},
+    "RANI3.SA": {"name": "Irani", "sector": "Papel e Celulose"},
+    "RAPT4.SA": {"name": "Randon", "sector": "Industrial"},
+    "LEVE3.SA": {"name": "Metal Leve", "sector": "Industrial"},
+    "POMO4.SA": {"name": "Marcopolo", "sector": "Industrial"},
     
     # Transporte e Aviação
     "AZUL4.SA": {"name": "Azul", "sector": "Aviação"},
@@ -113,10 +139,16 @@ IBOVESPA_STOCKS = {
     "COGN3.SA": {"name": "Cogna", "sector": "Educação"},
     
     # Outros
-    # NTCO3 Natura - Yahoo Finance data issues
+    # NTCO3 - Natura data issues on Yahoo Finance
     "TOTS3.SA": {"name": "Totvs", "sector": "Tecnologia"},
+    # SEQL3 - Sequoia delisted or low liquidity
+    # TRIS3 - Trisul data issues
     "CVCB3.SA": {"name": "CVC", "sector": "Turismo"},
+    "VIVA3.SA": {"name": "Vivara", "sector": "Varejo"},
+    "BMOB3.SA": {"name": "Bmob3", "sector": "Tecnologia"},
     "SLCE3.SA": {"name": "SLC Agrícola", "sector": "Agronegócio"},
+    "AGRO3.SA": {"name": "BrasilAgro", "sector": "Agronegócio"},
+    "GGPS3.SA": {"name": "GPS Participações", "sector": "Holding"},
 }
 
 # Commodities (preços em USD, serão convertidos para BRL)

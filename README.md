@@ -2,10 +2,20 @@
 
 Rastreador de cotações da bolsa brasileira (B3), ações americanas, commodities e criptomoedas com análise técnica, fundamentalista e sinais de trading para alimentar modelos de AI.
 
+## 📊 Status Atual (2026-01-12)
+
+✅ **Sistema 100% Operacional** - Última execução: 12/01/2026  
+📊 **128/128 ativos** processados com sucesso (100% success rate!)  
+⚡ **48.2s** tempo total de fetch (2.7 ativos/segundo)  
+🇧🇷 **106 ações brasileiras** + 20 US stocks + 4 commodities + 2 crypto  
+📈 **Benchmarks YTD**: IBOV +1.4% | S&P 500 +1.9% | USD/BRL R$ 5.37  
+🚦 **Sinais ativos**: 55 bullish | 16 bearish | 21 RSI overbought | 5 RSI oversold  
+📰 **Sentimento**: 20 notícias positivas | 7 negativas | 79 neutras  
+
 ## ✨ Recursos
 
-- 📊 **104 ativos rastreados** (Ibovespa, S&P 500, commodities, crypto)
-- ⚡ **Fetch paralelo** - 8 workers simultâneos (~30s para 104 ativos)
+- 📊 **128 ativos rastreados** (106 ações B3 + 20 US + 4 commodities + 2 crypto)
+- ⚡ **Fetch paralelo** - 8 workers simultâneos (~48s para 128 ativos)
 - 🌐 **REST API** - FastAPI com Swagger UI em http://localhost:8000/docs
 - 💱 **Dual currency** - Preços em BRL e USD para todos os ativos
 - 📈 **Comparações históricas** - 1D, 1W, 1M, YTD, 5Y, ALL
