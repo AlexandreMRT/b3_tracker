@@ -5,7 +5,7 @@
 ## 📊 Current State (v1.0)
 
 ### Implemented Features
-- [x] 128 assets tracked (106 BR stocks, 20 US stocks, 4 commodities, 2 crypto)
+- [x] 128 assets tracked (101 BR stocks, 20 US stocks, 4 commodities, 2 crypto)
 - [x] Parallel fetch with ThreadPoolExecutor (8 workers, ~48s for all assets)
 - [x] Polymarket sentiment integration (crypto, macro, geopolitical markets)
 - [x] Technical indicators: RSI-14, MA50, MA200, golden/death cross
@@ -17,6 +17,7 @@
 - [x] Dual currency: All prices in BRL and USD
 - [x] REST API: FastAPI with Swagger UI (port 8000)
 - [x] Reports: Human (Markdown) + AI (JSON) consolidated reports
+- [x] Algorithmic watchlist scoring (RSI + trend + news)
 - [x] Docker Compose: app (scheduler), api (REST), runner (CLI)
 - [x] Multi-user system with Google OAuth 2.0
 - [x] PostgreSQL database with user authentication
@@ -124,7 +125,30 @@ Notify user when important events happen:
 
 ---
 
-### 2. Weekly Email Report 📧
+### 4. Data Quality & Health Monitor ✅
+**Priority: HIGH | Effort: MEDIUM**
+
+Ensure data reliability before downstream analysis:
+- Detect stale quotes (last update older than N hours)
+- Missing/NaN fields per asset and per source
+- Outlier detection on price/volume changes
+- Market session anomalies (e.g., extreme spikes)
+- Daily health report + alerts
+
+**Implementation notes:**
+- Add validation rules + thresholds per asset type
+- Persist health checks to DB for auditability
+- Expose `/api/health/data` and include in reports
+
+**Files to create/modify:**
+- `src/health.py` (new - validation rules)
+- `src/exporter.py` (include health summary)
+- `src/api.py` (add health endpoint)
+- `src/scheduler.py` (run daily health check)
+
+---
+
+### 5. Weekly Email Report 📧
 **Priority: MEDIUM | Effort: LOW**
 
 Send summary email every Friday after market close:
@@ -146,30 +170,7 @@ Send summary email every Friday after market close:
 
 ---
 
-### 3. Static HTML Dashboard 📈
-**Priority: MEDIUM | Effort: MEDIUM**
-
-Generate a beautiful self-contained HTML file daily:
-- Interactive charts with Chart.js or Plotly
-- Sector heatmap
-- Top movers cards
-- Signal summary
-- No server needed - just open the HTML file
-
-**Implementation notes:**
-- Use Jinja2 for templating
-- Embed all CSS/JS inline for portability
-- Generate after each fetch
-- Save to `exports/dashboard_YYYY-MM-DD.html`
-
-**Files to create/modify:**
-- `src/dashboard.py` (new)
-- `src/templates/dashboard.html` (new)
-- `src/fetcher.py` (call dashboard generation after fetch)
-
----
-
-### 4. Deploy to Oracle Cloud Free Tier ☁️
+### 6. Deploy to Oracle Cloud Free Tier ☁️
 **Priority: HIGH | Effort: LOW**
 
 Free forever VM with:
@@ -194,6 +195,27 @@ Free forever VM with:
 ---
 
 ## 🔮 Future Features (Backlog)
+
+### Static HTML Dashboard 📈
+**Priority: LOW | Effort: MEDIUM**
+
+Generate a beautiful self-contained HTML file daily:
+- Interactive charts with Chart.js or Plotly
+- Sector heatmap
+- Top movers cards
+- Signal summary
+- No server needed - just open the HTML file
+
+**Implementation notes:**
+- Use Jinja2 for templating
+- Embed all CSS/JS inline for portability
+- Generate after each fetch
+- Save to `exports/dashboard_YYYY-MM-DD.html`
+
+**Files to create/modify:**
+- `src/dashboard.py` (new)
+- `src/templates/dashboard.html` (new)
+- `src/fetcher.py` (call dashboard generation after fetch)
 
 ### 5. Multi-User System with Google OAuth 👥
 **Priority: HIGH | Effort: HIGH**
@@ -403,8 +425,8 @@ Monitor CVM filings for insider transactions:
        │             │
        ▼             ▼
 ┌─────────────────────────────────────────────────────────┐
-│                    SQLite Database                       │
-│                    (data/cotacoes.db)                   │
+│                    PostgreSQL Database                   │
+│                    (db:5432/b3tracker)                  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -421,7 +443,7 @@ fetch_all    │        │                                    │
     │        │        │                                    │
     ▼        │        │                                    │
 ┌─────────┐  │        │                                    │
-│ SQLite  │◄─┘        │                                    │
+│ Postgres│◄─┘        │                                    │
 └────┬────┘           │                                    │
      │                │                                    │
      ▼                │                                    │
@@ -441,7 +463,7 @@ Use this prompt to continue development:
 I'm working on B3 Tracker, a stock market tracking application.
 
 Current state:
-- 128 assets (106 BR + 20 US stocks + 4 commodities + 2 crypto)
+- 128 assets (101 BR + 20 US stocks + 4 commodities + 2 crypto)
 - Parallel fetch (~48s for all)
 - Polymarket sentiment integration
 - Technical indicators, fundamentals, news sentiment
@@ -477,4 +499,4 @@ curl http://localhost:8000/api/signals
 
 ---
 
-*Last updated: 2026-01-12*
+*Last updated: 2026-01-17*
