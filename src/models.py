@@ -1,9 +1,12 @@
 """
 Modelos do banco de dados
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, Text, Enum
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import uuid
+import enum
 from database import Base
 
 
@@ -161,3 +164,146 @@ class Quote(Base):
     
     def __repr__(self):
         return f"<Quote(asset_id={self.asset_id}, price_brl={self.price_brl}, date={self.quote_date})>"
+
+
+# === USER MANAGEMENT & AUTHENTICATION ===
+
+class User(Base):
+    """Representa um usuário do sistema"""
+    __tablename__ = "users"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    google_id = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    picture_url = Column(String(500), nullable=True)
+    
+    # Preferences
+    default_currency = Column(String(3), default="BRL")  # BRL or USD
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_login = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    watchlists = relationship("Watchlist", back_populates="user", cascade="all, delete-orphan")
+    portfolios = relationship("Portfolio", back_populates="user", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<User(email='{self.email}', name='{self.name}')>"
+
+
+class Watchlist(Base):
+    """Representa um ativo sendo observado por um usuário"""
+    __tablename__ = "watchlists"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    ticker = Column(String(20), nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    user = relationship("User", back_populates="watchlists")
+    
+    # Unique constraint: user can't add same ticker twice
+    __table_args__ = (
+        UniqueConstraint('user_id', 'ticker', name='unique_user_ticker'),
+    )
+    
+    def __repr__(self):
+        return f"<Watchlist(user_id={self.user_id}, ticker='{self.ticker}')>"
+
+
+# === PORTFOLIO TRACKING ===
+
+class TransactionType(enum.Enum):
+    """Tipos de transação"""
+    BUY = "buy"
+    SELL = "sell"
+    DIVIDEND = "dividend"
+    SPLIT = "split"
+    BONUS = "bonus"
+
+
+class Portfolio(Base):
+    """Representa um portfólio de investimentos de um usuário"""
+    __tablename__ = "portfolios"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    is_default = Column(Integer, default=0)  # 1 if default portfolio
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="portfolios")
+    positions = relationship("Position", back_populates="portfolio", cascade="all, delete-orphan")
+    transactions = relationship("Transaction", back_populates="portfolio", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<Portfolio(user_id={self.user_id}, name='{self.name}')>"
+
+
+class Position(Base):
+    """Representa uma posição atual em um portfólio"""
+    __tablename__ = "positions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False)
+    ticker = Column(String(20), nullable=False, index=True)
+    
+    # Position details
+    quantity = Column(Float, nullable=False)  # Current quantity held
+    avg_price_brl = Column(Float, nullable=False)  # Average purchase price in BRL
+    first_purchase_date = Column(DateTime, nullable=False)
+    last_transaction_date = Column(DateTime, nullable=False)
+    
+    # Optional tracking
+    notes = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    portfolio = relationship("Portfolio", back_populates="positions")
+    
+    # Unique constraint: one position per ticker per portfolio
+    __table_args__ = (
+        UniqueConstraint('portfolio_id', 'ticker', name='unique_portfolio_ticker'),
+    )
+    
+    def __repr__(self):
+        return f"<Position(portfolio_id={self.portfolio_id}, ticker='{self.ticker}', quantity={self.quantity})>"
+
+
+class Transaction(Base):
+    """Representa uma transação (compra, venda, dividendo)"""
+    __tablename__ = "transactions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False)
+    ticker = Column(String(20), nullable=False, index=True)
+    
+    # Transaction details
+    transaction_type = Column(Enum(TransactionType), nullable=False)
+    quantity = Column(Float, nullable=False)
+    price_brl = Column(Float, nullable=False)  # Price per unit in BRL
+    total_brl = Column(Float, nullable=False)  # Total transaction value in BRL
+    fees_brl = Column(Float, default=0.0)  # Transaction fees in BRL
+    
+    # Metadata
+    transaction_date = Column(DateTime, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    portfolio = relationship("Portfolio", back_populates="transactions")
+    
+    def __repr__(self):
+        return f"<Transaction(ticker='{self.ticker}', type={self.transaction_type.value}, quantity={self.quantity}, date={self.transaction_date})>"

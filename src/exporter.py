@@ -10,6 +10,7 @@ from sqlalchemy import func
 
 from database import SessionLocal
 from models import Asset, Quote
+from scoring import build_algorithmic_watchlist
 
 # Lazy import for polymarket to avoid circular imports
 def get_polymarket_sentiment():
@@ -738,6 +739,8 @@ def generate_report_data() -> dict:
                 usd_brl = r["preco_brl"]
                 break
         
+        algorithmic = build_algorithmic_watchlist(all_stocks)
+
         return {
             "generated_at": datetime.now(),
             "total_assets": len(rows),
@@ -770,6 +773,7 @@ def generate_report_data() -> dict:
                 "positive": positive_news,
                 "negative": negative_news,
             },
+            "algorithmic": algorithmic,
             "all_data": rows,
         }
         
@@ -878,6 +882,54 @@ def export_human_report(filename: Optional[str] = None) -> str:
         lines.append(f"### ⬇️ Próximo da Mínima 52 semanas ({len(signals['near_52w_low'])} stocks)")
         tickers = ", ".join([r['ticker'] for r in signals['near_52w_low'][:10]])
         lines.append(f"{tickers}")
+        lines.append("")
+
+    # Algorithmic Watchlist (experimental)
+    algo = data.get('algorithmic', {})
+    watchlist = algo.get('watchlist', [])
+    avoid_list = algo.get('avoid_list', [])
+
+    def format_reason(reason):
+        labels = {
+            "rsi_extreme_oversold": "RSI muito baixo",
+            "rsi_oversold": "RSI oversold",
+            "bullish_trend": "tendência bullish",
+            "bearish_trend": "tendência bearish",
+            "golden_cross": "golden cross",
+            "above_ma50": "acima MA50",
+            "above_ma200": "acima MA200",
+            "near_52w_low": "próx. mínima 52w",
+            "near_52w_high": "próx. máxima 52w",
+            "volume_spike": "pico de volume",
+            "news_positive": "news positiva",
+            "news_positive_strong": "news muito positiva",
+            "news_negative": "news negativa",
+            "news_negative_strong": "news muito negativa",
+            "ytd_strong": "YTD forte",
+            "ytd_weak": "YTD fraco",
+            "rsi_overbought": "RSI overbought",
+            "rsi_extreme_overbought": "RSI muito alto",
+        }
+        return labels.get(reason, reason)
+
+    if watchlist:
+        lines.append("## 🧠 Algorithmic Watchlist (experimental)")
+        lines.append("*Observação: não é recomendação financeira.*")
+        lines.append("")
+        for r in watchlist[:8]:
+            reasons = ", ".join([format_reason(x) for x in r.get("reasons", [])][:4])
+            lines.append(f"- **{r['ticker']}** ({r.get('nome', '')[:20]}) | score: {r['score']:.1f}")
+            if reasons:
+                lines.append(f"  - motivos: {reasons}")
+        lines.append("")
+
+    if avoid_list:
+        lines.append("### ⚠️ Risk Flags (watch out)")
+        for r in avoid_list[:6]:
+            flags = ", ".join([format_reason(x) for x in r.get("risk_flags", [])][:4])
+            lines.append(f"- **{r['ticker']}** | score: {r['score']:.1f}")
+            if flags:
+                lines.append(f"  - alertas: {flags}")
         lines.append("")
     
     # News Sentiment
@@ -1045,6 +1097,8 @@ def export_ai_report(filename: Optional[str] = None) -> str:
                 r['ticker'] for r in data['signals']['bullish'] 
                 if r.get('var_ytd', 0) and r['var_ytd'] > 20
             ][:10],
+            "algorithmic_watchlist": data.get("algorithmic", {}).get("watchlist", []),
+            "algorithmic_avoid_list": data.get("algorithmic", {}).get("avoid_list", []),
         },
         "polymarket_sentiment": _get_polymarket_for_report(),
         "full_data": data['all_data'],

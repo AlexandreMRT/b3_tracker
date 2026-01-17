@@ -2,19 +2,20 @@
 
 Rastreador de cotações da bolsa brasileira (B3), ações americanas, commodities e criptomoedas com análise técnica, fundamentalista e sinais de trading para alimentar modelos de AI.
 
-## 📊 Status Atual (2026-01-12)
+## 📊 Status Atual (2026-01-16)
 
-✅ **Sistema 100% Operacional** - Última execução: 12/01/2026  
-📊 **128/128 ativos** processados com sucesso (100% success rate!)  
-⚡ **48.2s** tempo total de fetch (2.7 ativos/segundo)  
-🇧🇷 **106 ações brasileiras** + 20 US stocks + 4 commodities + 2 crypto  
-📈 **Benchmarks YTD**: IBOV +1.4% | S&P 500 +1.9% | USD/BRL R$ 5.37  
-🚦 **Sinais ativos**: 55 bullish | 16 bearish | 21 RSI overbought | 5 RSI oversold  
-📰 **Sentimento**: 20 notícias positivas | 7 negativas | 79 neutras  
+✅ **Sistema operacional** - Última execução: 16/01/2026  
+📊 **128/128 ativos** processados com sucesso  
+⚡ **~48s** tempo total de fetch (8 workers)  
+🇧🇷 **101 ações brasileiras** + 20 US stocks + 4 commodities + 2 crypto  
+📈 **Benchmarks YTD**: IBOV +1.3% | S&P 500 +1.9% | USD/BRL R$ 5.37  
+🚦 **Sinais ativos**: 65 bullish | 19 bearish | 26 RSI overbought | 5 RSI oversold  
+📰 **Sentimento**: 22 notícias positivas | 5 negativas | 74 neutras  
+🧠 **Algorithmic watchlist**: scoring automático com RSI + tendência + news  
 
 ## ✨ Recursos
 
-- 📊 **128 ativos rastreados** (106 ações B3 + 20 US + 4 commodities + 2 crypto)
+- 📊 **128 ativos rastreados** (101 ações B3 + 20 US + 4 commodities + 2 crypto)
 - ⚡ **Fetch paralelo** - 8 workers simultâneos (~48s para 128 ativos)
 - 🌐 **REST API** - FastAPI com Swagger UI em http://localhost:8000/docs
 - 💱 **Dual currency** - Preços em BRL e USD para todos os ativos
@@ -25,6 +26,7 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 - 🚦 **Trading signals** - Detecção automática de sinais bullish/bearish
 - 📰 **News sentiment** - Análise de sentimento de notícias (PT-BR e EN)
 - 🔮 **Polymarket sentiment** - Dados de mercados de previsão (cripto, macro, geopolítica)
+- 🧠 **Algorithmic watchlist** - Score por confluência de sinais e news
 - 🤖 **AI-ready exports** - JSON otimizado para modelos de machine learning
 
 ## 🚀 Quick Start
@@ -88,7 +90,8 @@ Arquivo `exports/ai_report_YYYY-MM-DD.json` com:
 - `news_sentiment` - Scores e headlines
 - `polymarket_sentiment` - Sentimento de mercados de previsão por categoria
 - `actionable_insights` - Listas de potential_buys, potential_sells, momentum_stocks
-- `full_data` - Dados completos de todos os 104 ativos
+- `algorithmic_watchlist` - Lista ranqueada com score, motivos e alertas
+- `full_data` - Dados completos de todos os 128 ativos
 
 ## 🌐 REST API
 
@@ -155,20 +158,20 @@ curl http://localhost:8000/api/sectors
 
 ```
 b3_tracker/
-├── docker-compose.yml    # Orquestração Docker
+├── docker-compose.yml    # Orquestração Docker (PostgreSQL + app + api)
 ├── Dockerfile            # Imagem Python
 ├── requirements.txt      # Dependências
 ├── src/
 │   ├── main.py           # CLI entry point
 │   ├── api.py            # REST API (FastAPI)
-│   ├── assets.py         # Lista de ativos (97+ ações)
-│   ├── database.py       # Conexão SQLite
+│   ├── assets.py         # Lista de ativos
+│   ├── database.py       # Conexão PostgreSQL/SQLAlchemy
 │   ├── models.py         # Modelos de dados (70+ campos)
 │   ├── fetcher.py        # Busca cotações + indicadores
-│   ├── exporter.py       # Exporta CSV/JSON + views
-│   └── scheduler.py      # Agendamento diário
-├── data/                 # Banco de dados SQLite
-│   └── cotacoes.db
+│   ├── exporter.py       # Exporta CSV/JSON + reports
+│   ├── scheduler.py      # Agendamento diário
+│   └── scoring.py        # Score algorítmico (watchlist)
+├── data/                 # Arquivos locais / volume
 └── exports/              # Arquivos exportados
     ├── cotacoes_YYYY-MM-DD.csv
     ├── cotacoes_YYYY-MM-DD.json
@@ -179,7 +182,7 @@ b3_tracker/
 
 ## 💾 Ativos Rastreados
 
-### 🇧🇷 Ações do Ibovespa (77 ativos)
+### 🇧🇷 Ações brasileiras (101 ativos)
 
 | Setor | Exemplos |
 |-------|----------|
@@ -393,7 +396,7 @@ Summary: 12 positive | 5 negative | 59 neutral | 96 stocks with news
 | `SCHEDULE_ENABLED` | `true` | Ativa/desativa scheduler |
 | `SCHEDULE_TIME` | `18:00` | Horário de execução diária |
 | `TZ` | `America/Sao_Paulo` | Timezone |
-| `DB_PATH` | `/app/data/cotacoes.db` | Caminho do banco |
+| `DATABASE_URL` | `postgresql://b3user:***@db:5432/b3tracker` | Conexão PostgreSQL |
 | `EXPORTS_PATH` | `/app/exports` | Pasta de exportação |
 
 ### Modificar horário de execução
@@ -449,6 +452,25 @@ docker compose run --rm runner python src/main.py --news
 docker compose run --rm runner python src/main.py --export --json
 ```
 
+## 🗺️ Roadmap (Resumo)
+
+**Alta prioridade**
+- Web dashboard (React/Vue ou Jinja2 SSR) com portfólio, transações e watchlist
+- Test suite (pytest + CI)
+- Telegram bot de alertas (RSI, cross, volume, news)
+
+**Média prioridade**
+- Weekly email report
+- Static HTML dashboard diário (Chart.js/Plotly)
+
+**Backlog**
+- Backtesting de sinais
+- Graham valuation multiples
+- Matriz de correlação setorial
+- Insider trading alerts
+
+Veja detalhes completos em [ROADMAP.md](ROADMAP.md).
+
 ## 📝 Licença
 
 MIT
@@ -462,8 +484,8 @@ O sistema utiliza **processamento paralelo** para buscar dados de forma eficient
 | Fase | Workers | Tempo | Descrição |
 |------|---------|-------|-----------|
 | Fase 1 | 3 | ~1.5s | Benchmarks (USD/BRL, IBOV, S&P500) |
-| Fase 2 | 8 | ~18s | Cotações de 104 ativos |
-| Fase 3 | 5 | ~9s | Notícias de 97 ações |
+| Fase 2 | 8 | ~18s | Cotações de 128 ativos |
+| Fase 3 | 5 | ~9s | Notícias de ~121 ações |
 | Fase 4 | 1 | ~0.5s | Save to DB (sequencial) |
 | **Total** | - | **~30s** | **3.6 ativos/segundo** |
 
