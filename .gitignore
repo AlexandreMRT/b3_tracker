@@ -8,6 +8,10 @@ venv/
 env/
 .venv/
 
+# Environment variables
+.env
+.env.*
+
 # Database
 data/*.db
 data/*.sqlite
