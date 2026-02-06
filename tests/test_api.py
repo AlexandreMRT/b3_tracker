@@ -6,8 +6,8 @@ Uses TestClient with an in-memory SQLite backend.
 # Health / System endpoints
 # ---------------------------------------------------------------------------
 
-class TestSystemEndpoints:
 
+class TestSystemEndpoints:
     def test_root_health_check(self, app_client):
         resp = app_client.get("/")
         assert resp.status_code == 200
@@ -24,8 +24,8 @@ class TestSystemEndpoints:
 # Quotes endpoints
 # ---------------------------------------------------------------------------
 
-class TestQuotesEndpoints:
 
+class TestQuotesEndpoints:
     def test_get_all_quotes(self, app_client, sample_assets, sample_quotes):
         resp = app_client.get("/api/quotes")
         assert resp.status_code == 200
@@ -60,8 +60,8 @@ class TestQuotesEndpoints:
 # Signals endpoints
 # ---------------------------------------------------------------------------
 
-class TestSignalsEndpoints:
 
+class TestSignalsEndpoints:
     def test_get_signals(self, app_client, sample_assets, sample_quotes):
         resp = app_client.get("/api/signals")
         assert resp.status_code == 200
@@ -78,8 +78,8 @@ class TestSignalsEndpoints:
 # News endpoints
 # ---------------------------------------------------------------------------
 
-class TestNewsEndpoints:
 
+class TestNewsEndpoints:
     def test_get_news(self, app_client, sample_assets, sample_quotes):
         resp = app_client.get("/api/news")
         assert resp.status_code == 200
@@ -98,8 +98,8 @@ class TestNewsEndpoints:
 # Movers endpoints
 # ---------------------------------------------------------------------------
 
-class TestMoversEndpoints:
 
+class TestMoversEndpoints:
     def test_get_movers_default(self, app_client, sample_assets, sample_quotes):
         resp = app_client.get("/api/movers")
         assert resp.status_code == 200
@@ -120,8 +120,8 @@ class TestMoversEndpoints:
 # Sectors endpoints
 # ---------------------------------------------------------------------------
 
-class TestSectorsEndpoints:
 
+class TestSectorsEndpoints:
     def test_get_sectors(self, app_client, sample_assets, sample_quotes):
         resp = app_client.get("/api/sectors")
         assert resp.status_code == 200
@@ -133,8 +133,8 @@ class TestSectorsEndpoints:
 # Auth endpoints
 # ---------------------------------------------------------------------------
 
-class TestAuthEndpoints:
 
+class TestAuthEndpoints:
     def test_get_me(self, app_client):
         resp = app_client.get("/auth/me")
         assert resp.status_code == 200
@@ -152,8 +152,8 @@ class TestAuthEndpoints:
 # Watchlist endpoints
 # ---------------------------------------------------------------------------
 
-class TestWatchlistEndpoints:
 
+class TestWatchlistEndpoints:
     def test_get_empty_watchlist(self, app_client):
         resp = app_client.get("/api/watchlist")
         assert resp.status_code == 200
@@ -182,8 +182,8 @@ class TestWatchlistEndpoints:
 # Portfolio endpoints
 # ---------------------------------------------------------------------------
 
-class TestPortfolioEndpoints:
 
+class TestPortfolioEndpoints:
     def test_create_portfolio(self, app_client):
         resp = app_client.post("/api/portfolios?name=API+Test+Portfolio")
         assert resp.status_code == 200
@@ -207,13 +207,12 @@ class TestPortfolioEndpoints:
         assert resp.status_code == 404
 
     def test_update_portfolio(self, app_client, sample_portfolio):
-        resp = app_client.put(
-            f"/api/portfolios/{sample_portfolio.id}?name=Updated+Name"
-        )
+        resp = app_client.put(f"/api/portfolios/{sample_portfolio.id}?name=Updated+Name")
         assert resp.status_code == 200
 
     def test_delete_portfolio(self, app_client, sample_user, db_session):
         from portfolio import create_portfolio
+
         p = create_portfolio(db_session, str(sample_user.id), "To Delete via API")
         resp = app_client.delete(f"/api/portfolios/{p.id}")
         assert resp.status_code == 200
@@ -263,13 +262,16 @@ class TestPortfolioEndpoints:
         assert "transactions" in resp.json()
 
     def test_delete_transaction_via_api(self, app_client, sample_portfolio, db_session):
-        from portfolio import add_transaction
         from models import TransactionType
+        from portfolio import add_transaction
+
         tx = add_transaction(
-            db_session, sample_portfolio.id, "ABEV3.SA",
-            TransactionType.BUY, 10, 15.0,
+            db_session,
+            sample_portfolio.id,
+            "ABEV3.SA",
+            TransactionType.BUY,
+            10,
+            15.0,
         )
-        resp = app_client.delete(
-            f"/api/portfolios/{sample_portfolio.id}/transactions/{tx.id}"
-        )
+        resp = app_client.delete(f"/api/portfolios/{sample_portfolio.id}/transactions/{tx.id}")
         assert resp.status_code == 200

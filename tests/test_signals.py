@@ -1,15 +1,16 @@
 """
 Unit tests for the shared signals module.
 """
+
 from signals import (
-    detect_signals,
-    RSI_OVERSOLD,
-    RSI_OVERBOUGHT,
-    VOLUME_SPIKE_RATIO,
     NEAR_52W_HIGH_PCT,
     NEAR_52W_LOW_PCT,
-    NEWS_SENTIMENT_POS,
     NEWS_SENTIMENT_NEG,
+    NEWS_SENTIMENT_POS,
+    RSI_OVERBOUGHT,
+    RSI_OVERSOLD,
+    VOLUME_SPIKE_RATIO,
+    detect_signals,
 )
 
 
@@ -208,10 +209,14 @@ class TestSignalResultHelpers:
     def test_as_db_flags_keys(self):
         flags = detect_signals({}).as_db_flags()
         expected_keys = {
-            "signal_rsi_oversold", "signal_rsi_overbought",
-            "signal_52w_high", "signal_52w_low",
-            "signal_volume_spike", "signal_golden_cross",
-            "signal_death_cross", "signal_summary",
+            "signal_rsi_oversold",
+            "signal_rsi_overbought",
+            "signal_52w_high",
+            "signal_52w_low",
+            "signal_volume_spike",
+            "signal_golden_cross",
+            "signal_death_cross",
+            "signal_summary",
         }
         assert set(flags.keys()) == expected_keys
 
@@ -227,7 +232,7 @@ class TestThresholdConstants:
 
     def test_52w_thresholds(self):
         assert NEAR_52W_HIGH_PCT < 0  # negative = within X% of high
-        assert NEAR_52W_LOW_PCT > 0   # positive = within X% above low
+        assert NEAR_52W_LOW_PCT > 0  # positive = within X% above low
 
     def test_news_thresholds(self):
         assert NEWS_SENTIMENT_NEG < 0 < NEWS_SENTIMENT_POS

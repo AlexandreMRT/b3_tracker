@@ -1,9 +1,11 @@
 """
 Configuração do banco de dados (PostgreSQL ou SQLite)
 """
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+
 import os
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Database URL - supports both PostgreSQL and SQLite
 DATABASE_URL = os.environ.get("DATABASE_URL", None)
@@ -23,7 +25,7 @@ else:
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,  # Verify connections before using
-        pool_recycle=3600,   # Recycle connections after 1 hour
+        pool_recycle=3600,  # Recycle connections after 1 hour
     )
 
 # Session factory
@@ -31,6 +33,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base para os modelos
 Base = declarative_base()
+
 
 def get_db():
     """Generator para obter sessão do banco"""
@@ -40,11 +43,8 @@ def get_db():
     finally:
         db.close()
 
+
 def init_db():
     """Inicializa o banco de dados criando as tabelas"""
-    from models import (
-        Asset, Quote, User, Watchlist, 
-        Portfolio, Position, Transaction
-    )  # Import all models
     Base.metadata.create_all(bind=engine)
     print("✅ Banco de dados inicializado!")

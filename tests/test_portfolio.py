@@ -1,32 +1,33 @@
 """
 Tests for portfolio operations – uses the in-memory DB from conftest.
 """
-import pytest
+
 from datetime import datetime, timezone
 
-from portfolio import (
-    get_user_portfolios,
-    get_portfolio_by_id,
-    create_portfolio,
-    update_portfolio,
-    delete_portfolio,
-    get_portfolio_positions,
-    get_position_by_ticker,
-    add_transaction,
-    delete_transaction,
-    get_portfolio_transactions,
-    calculate_position_performance,
-    calculate_portfolio_performance,
-)
-from models import Position, TransactionType
+import pytest
 
+from models import Position, TransactionType
+from portfolio import (
+    add_transaction,
+    calculate_portfolio_performance,
+    calculate_position_performance,
+    create_portfolio,
+    delete_portfolio,
+    delete_transaction,
+    get_portfolio_by_id,
+    get_portfolio_positions,
+    get_portfolio_transactions,
+    get_position_by_ticker,
+    get_user_portfolios,
+    update_portfolio,
+)
 
 # ---------------------------------------------------------------------------
 # Portfolio CRUD
 # ---------------------------------------------------------------------------
 
-class TestPortfolioCRUD:
 
+class TestPortfolioCRUD:
     def test_create_portfolio(self, db_session, sample_user):
         p = create_portfolio(db_session, str(sample_user.id), "My Portfolio", "desc", is_default=True)
         assert p.id is not None
@@ -56,9 +57,7 @@ class TestPortfolioCRUD:
         assert p is None
 
     def test_update_portfolio_name(self, db_session, sample_user, sample_portfolio):
-        updated = update_portfolio(
-            db_session, sample_portfolio.id, str(sample_user.id), name="Renamed"
-        )
+        updated = update_portfolio(db_session, sample_portfolio.id, str(sample_user.id), name="Renamed")
         assert updated.name == "Renamed"
 
     def test_delete_portfolio(self, db_session, sample_user):
@@ -74,8 +73,8 @@ class TestPortfolioCRUD:
 # Positions
 # ---------------------------------------------------------------------------
 
-class TestPositions:
 
+class TestPositions:
     def test_positions_exist_after_fixture(self, db_session, sample_portfolio):
         positions = get_portfolio_positions(db_session, sample_portfolio.id)
         assert len(positions) == 2
@@ -98,8 +97,8 @@ class TestPositions:
 # Transactions
 # ---------------------------------------------------------------------------
 
-class TestTransactions:
 
+class TestTransactions:
     def test_add_buy_transaction_creates_position(self, db_session, sample_user):
         p = create_portfolio(db_session, str(sample_user.id), "TX Test")
 
@@ -179,8 +178,13 @@ class TestTransactions:
         p = create_portfolio(db_session, str(sample_user.id), "Fee Test")
 
         tx = add_transaction(
-            db_session, p.id, "ABEV3.SA", TransactionType.BUY,
-            quantity=100, price_brl=15.00, fees_brl=7.50,
+            db_session,
+            p.id,
+            "ABEV3.SA",
+            TransactionType.BUY,
+            quantity=100,
+            price_brl=15.00,
+            fees_brl=7.50,
         )
         # total_brl = (100 * 15) + 7.50 = 1507.50
         assert tx.total_brl == pytest.approx(1507.50)
@@ -190,8 +194,8 @@ class TestTransactions:
 # Performance Calculations
 # ---------------------------------------------------------------------------
 
-class TestPerformanceCalculations:
 
+class TestPerformanceCalculations:
     def test_position_performance(self, db_session, sample_portfolio, sample_assets, sample_quotes):
         """PETR4 bought at 35, current price 38.50 => profit."""
         pos = get_position_by_ticker(db_session, sample_portfolio.id, "PETR4.SA")
@@ -227,9 +231,7 @@ class TestPerformanceCalculations:
         # Dividend income should include the 50 BRL from fixture
         assert perf["dividend_income"] == pytest.approx(50.00)
         # total_return = profit_loss + dividends
-        assert perf["total_return"] == pytest.approx(
-            perf["total_profit_loss"] + perf["dividend_income"]
-        )
+        assert perf["total_return"] == pytest.approx(perf["total_profit_loss"] + perf["dividend_income"])
 
     def test_position_performance_no_asset_returns_none(self, db_session, sample_portfolio):
         """Position for a non-existent asset should return None."""

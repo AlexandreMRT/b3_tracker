@@ -1,18 +1,19 @@
 """
 Unit tests for the users module.
 """
+
 from users import (
-    get_user_by_id,
-    get_user_by_email,
-    update_user_preferences,
-    get_user_watchlist,
     add_to_watchlist,
-    remove_from_watchlist,
+    get_user_by_email,
+    get_user_by_id,
+    get_user_watchlist,
     is_in_watchlist,
+    remove_from_watchlist,
+    update_user_preferences,
 )
 
-class TestUserOperations:
 
+class TestUserOperations:
     def test_get_user_by_id(self, db_session, sample_user):
         user = get_user_by_id(db_session, str(sample_user.id))
         assert user is not None
@@ -37,7 +38,6 @@ class TestUserOperations:
 
 
 class TestWatchlistOperations:
-
     def test_empty_watchlist(self, db_session, sample_user):
         wl = get_user_watchlist(db_session, str(sample_user.id))
         assert wl == []

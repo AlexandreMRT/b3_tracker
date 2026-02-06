@@ -20,10 +20,8 @@ IBOVESPA_STOCKS = {
     # SULA11 merged with Rede D'Or (RDOR3) in 2022
     # CIEL3 taken private by Bradesco/BB in 2024
     "B3SA3.SA": {"name": "B3", "sector": "Serviços Financeiros"},
-    
     # Holdings
     "ITSA4.SA": {"name": "Itaúsa PN", "sector": "Holding"},
-    
     # Petróleo e Gás
     "PETR3.SA": {"name": "Petrobras ON", "sector": "Petróleo e Gás"},
     "PETR4.SA": {"name": "Petrobras PN", "sector": "Petróleo e Gás"},
@@ -34,7 +32,6 @@ IBOVESPA_STOCKS = {
     "CSAN3.SA": {"name": "Cosan", "sector": "Petróleo e Gás"},
     "VBBR3.SA": {"name": "Vibra Energia", "sector": "Petróleo e Gás"},
     "RAIZ4.SA": {"name": "Raízen", "sector": "Petróleo e Gás"},
-    
     # Mineração e Siderurgia
     "VALE3.SA": {"name": "Vale", "sector": "Mineração"},
     "CSNA3.SA": {"name": "CSN", "sector": "Siderurgia"},
@@ -43,7 +40,6 @@ IBOVESPA_STOCKS = {
     "USIM5.SA": {"name": "Usiminas PNA", "sector": "Siderurgia"},
     "BRAP4.SA": {"name": "Bradespar PN", "sector": "Mineração"},
     "CMIN3.SA": {"name": "CSN Mineração", "sector": "Mineração"},
-    
     # Energia Elétrica
     # ELET3.SA, ELET6.SA - Eletrobras data unavailable on Yahoo Finance
     "EGIE3.SA": {"name": "Engie Brasil", "sector": "Energia Elétrica"},
@@ -56,17 +52,14 @@ IBOVESPA_STOCKS = {
     "AURE3.SA": {"name": "Auren Energia", "sector": "Energia Elétrica"},
     "ENEV3.SA": {"name": "Eneva", "sector": "Energia Elétrica"},
     "NEOE3.SA": {"name": "Neoenergia", "sector": "Energia Elétrica"},
-    
     # Saneamento
     "SBSP3.SA": {"name": "Sabesp", "sector": "Saneamento"},
     "CSMG3.SA": {"name": "Copasa", "sector": "Saneamento"},
     "SAPR11.SA": {"name": "Sanepar", "sector": "Saneamento"},
-    
     # Telecomunicações
     "VIVT3.SA": {"name": "Telefônica Brasil", "sector": "Telecomunicações"},
     "TIMS3.SA": {"name": "TIM", "sector": "Telecomunicações"},
     "OIBR3.SA": {"name": "Oi ON", "sector": "Telecomunicações"},
-    
     # Varejo
     "MGLU3.SA": {"name": "Magazine Luiza", "sector": "Varejo"},
     "LREN3.SA": {"name": "Lojas Renner", "sector": "Varejo"},
@@ -85,14 +78,12 @@ IBOVESPA_STOCKS = {
     "ALPA4.SA": {"name": "Alpargatas", "sector": "Varejo"},
     "GRND3.SA": {"name": "Grendene", "sector": "Varejo"},
     "VULC3.SA": {"name": "Vulcabras", "sector": "Varejo"},
-    
     # Alimentos e Bebidas
     "ABEV3.SA": {"name": "Ambev", "sector": "Bebidas"},
     # JBSS3, BRFS3, MRFG3 - Yahoo Finance data issues (API problems)
     "BEEF3.SA": {"name": "Minerva", "sector": "Alimentos"},
     "MDIA3.SA": {"name": "M. Dias Branco", "sector": "Alimentos"},
     "SMTO3.SA": {"name": "São Martinho", "sector": "Açúcar e Álcool"},
-    
     # Saúde
     "RDOR3.SA": {"name": "Rede D'Or", "sector": "Saúde"},
     "HAPV3.SA": {"name": "Hapvida", "sector": "Saúde"},
@@ -102,7 +93,6 @@ IBOVESPA_STOCKS = {
     "PNVL3.SA": {"name": "Dasa", "sector": "Saúde"},
     "QUAL3.SA": {"name": "Qualicorp", "sector": "Saúde"},
     # GNDI3 merged with Hapvida (now HAPV3)
-    
     # Construção Civil e Imobiliário
     "CYRE3.SA": {"name": "Cyrela", "sector": "Construção"},
     "EZTC3.SA": {"name": "EZTEC", "sector": "Construção"},
@@ -114,7 +104,6 @@ IBOVESPA_STOCKS = {
     "IGTI11.SA": {"name": "Iguatemi", "sector": "Shoppings"},
     # ALSO3 - Aliansce Sonae data issues
     # BRML3 merged with Aliansce
-    
     # Indústria
     "WEGE3.SA": {"name": "WEG", "sector": "Industrial"},
     "EMBJ3.SA": {"name": "Embraer", "sector": "Aeronáutica"},  # Was EMBR3 until 2025
@@ -129,15 +118,12 @@ IBOVESPA_STOCKS = {
     "RAPT4.SA": {"name": "Randon", "sector": "Industrial"},
     "LEVE3.SA": {"name": "Metal Leve", "sector": "Industrial"},
     "POMO4.SA": {"name": "Marcopolo", "sector": "Industrial"},
-    
     # Transporte e Aviação
     "AZUL4.SA": {"name": "Azul", "sector": "Aviação"},
     # GOLL4 removed - Chapter 11 bankruptcy, data unreliable
-    
     # Educação
     "YDUQ3.SA": {"name": "Yduqs", "sector": "Educação"},
     "COGN3.SA": {"name": "Cogna", "sector": "Educação"},
-    
     # Outros
     # NTCO3 - Natura data issues on Yahoo Finance
     "TOTS3.SA": {"name": "Totvs", "sector": "Tecnologia"},
@@ -180,28 +166,25 @@ US_STOCKS = {
     "META": {"name": "Meta (Facebook)", "sector": "Tecnologia"},
     "NVDA": {"name": "NVIDIA", "sector": "Tecnologia"},
     "TSLA": {"name": "Tesla", "sector": "Automotivo"},
-    
     # Financeiro
     "JPM": {"name": "JPMorgan Chase", "sector": "Bancário"},
     "BAC": {"name": "Bank of America", "sector": "Bancário"},
     "WFC": {"name": "Wells Fargo", "sector": "Bancário"},
     "GS": {"name": "Goldman Sachs", "sector": "Bancário"},
-    
     # Saúde
     "JNJ": {"name": "Johnson & Johnson", "sector": "Saúde"},
     "UNH": {"name": "UnitedHealth", "sector": "Saúde"},
     "PFE": {"name": "Pfizer", "sector": "Farmacêutico"},
-    
     # Consumo
     "KO": {"name": "Coca-Cola", "sector": "Bebidas"},
     "PEP": {"name": "PepsiCo", "sector": "Bebidas"},
     "MCD": {"name": "McDonald's", "sector": "Restaurantes"},
     "WMT": {"name": "Walmart", "sector": "Varejo"},
-    
     # Energia
     "XOM": {"name": "Exxon Mobil", "sector": "Petróleo e Gás"},
     "CVX": {"name": "Chevron", "sector": "Petróleo e Gás"},
 }
+
 
 def get_all_assets():
     """Retorna todos os ativos para rastrear"""
@@ -212,6 +195,7 @@ def get_all_assets():
     all_assets.update(CRYPTO)
     all_assets.update(CURRENCY)
     return all_assets
+
 
 def get_asset_info(ticker):
     """Retorna informações de um ativo específico"""

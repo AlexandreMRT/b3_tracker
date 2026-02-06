@@ -1,7 +1,8 @@
 """
 Algorithmic scoring service for watchlists.
 """
-from typing import Dict, List, Any
+
+from typing import Any, Dict, List
 
 
 def build_algorithmic_watchlist(

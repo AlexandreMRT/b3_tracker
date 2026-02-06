@@ -2,12 +2,13 @@
 Unit tests for the scoring module (build_algorithmic_watchlist).
 These are pure-function tests – no DB, no network.
 """
-from scoring import build_algorithmic_watchlist
 
+from scoring import build_algorithmic_watchlist
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_item(**overrides) -> dict:
     """Build a minimal quote-like dict for the scorer."""
@@ -33,6 +34,7 @@ def _make_item(**overrides) -> dict:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestScoringBasic:
     """Basic scoring behaviour."""
@@ -206,7 +208,7 @@ class TestWatchlistOutput:
 
     def test_min_score_filters_candidates(self):
         items = [
-            _make_item(ticker="A", rsi_14=50),         # score ~0
+            _make_item(ticker="A", rsi_14=50),  # score ~0
             _make_item(ticker="B", rsi_14=20, signal_summary="bullish"),  # score high
         ]
         result = build_algorithmic_watchlist(items, min_score=3.0)
@@ -221,16 +223,13 @@ class TestWatchlistOutput:
         assert result["avoid_list"][0]["score"] <= -2.0
 
     def test_max_items_limits_output(self):
-        items = [
-            _make_item(ticker=f"T{i}", rsi_14=20, signal_summary="bullish")
-            for i in range(20)
-        ]
+        items = [_make_item(ticker=f"T{i}", rsi_14=20, signal_summary="bullish") for i in range(20)]
         result = build_algorithmic_watchlist(items, min_score=0, max_items=5)
         assert len(result["watchlist"]) <= 5
 
     def test_watchlist_sorted_by_score_desc(self):
         items = [
-            _make_item(ticker="LOW", rsi_14=28),       # score ~2
+            _make_item(ticker="LOW", rsi_14=28),  # score ~2
             _make_item(ticker="HIGH", rsi_14=20, signal_summary="bullish"),  # score ~5+
         ]
         result = build_algorithmic_watchlist(items, min_score=0)
@@ -242,8 +241,15 @@ class TestWatchlistOutput:
         result = build_algorithmic_watchlist([item], min_score=-100)
         entry = result["watchlist"][0]
         expected_keys = {
-            "ticker", "nome", "score", "rsi_14", "var_ytd",
-            "news_sentiment", "signal_summary", "reasons", "risk_flags",
+            "ticker",
+            "nome",
+            "score",
+            "rsi_14",
+            "var_ytd",
+            "news_sentiment",
+            "signal_summary",
+            "reasons",
+            "risk_flags",
         }
         assert set(entry.keys()) == expected_keys
 
@@ -254,15 +260,15 @@ class TestCompositeScoring:
     def test_perfect_bull_case(self):
         """Asset with every bullish signal should have a high score."""
         item = _make_item(
-            rsi_14=20,                       # +3
-            signal_summary="bullish",         # +2
-            signal_golden_cross=1,            # +1
-            above_ma_50=True,                 # +0.5
-            above_ma_200=True,                # +0.5
-            signal_52w_low=1,                 # +1
-            signal_volume_spike=1,            # +0.5
-            news_sentiment_combined=0.5,      # +2
-            var_ytd=25.0,                     # +1
+            rsi_14=20,  # +3
+            signal_summary="bullish",  # +2
+            signal_golden_cross=1,  # +1
+            above_ma_50=True,  # +0.5
+            above_ma_200=True,  # +0.5
+            signal_52w_low=1,  # +1
+            signal_volume_spike=1,  # +0.5
+            news_sentiment_combined=0.5,  # +2
+            var_ytd=25.0,  # +1
         )
         result = build_algorithmic_watchlist([item], min_score=-100)
         entry = result["watchlist"][0]
@@ -271,11 +277,11 @@ class TestCompositeScoring:
     def test_perfect_bear_case(self):
         """Asset with every bearish signal should have a very negative score."""
         item = _make_item(
-            rsi_14=85,                        # -3
-            signal_summary="bearish",          # -2
-            signal_52w_high=1,                 # -1
-            news_sentiment_combined=-0.5,      # -2
-            var_ytd=-25.0,                     # -1
+            rsi_14=85,  # -3
+            signal_summary="bearish",  # -2
+            signal_52w_high=1,  # -1
+            news_sentiment_combined=-0.5,  # -2
+            var_ytd=-25.0,  # -1
         )
         result = build_algorithmic_watchlist([item])
         entry = result["avoid_list"][0]

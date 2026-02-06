@@ -13,19 +13,24 @@ Uso:
     python main.py --ai         # Análise detalhada para AI com sinais e news
     python main.py --report     # Gera relatórios Human (MD) e AI (JSON)
 """
-import sys
+
 import os
+import sys
 
 # Adicionar o diretório src ao path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import init_db
-from fetcher import fetch_all_quotes
 from exporter import (
-    export_to_csv, export_to_json, print_summary, 
-    print_ai_analysis, print_signals, print_news_sentiment,
-    generate_reports
+    export_to_csv,
+    export_to_json,
+    generate_reports,
+    print_ai_analysis,
+    print_news_sentiment,
+    print_signals,
+    print_summary,
 )
+from fetcher import fetch_all_quotes
 from scheduler import run_scheduler
 
 
@@ -46,13 +51,13 @@ def print_banner():
 def main():
     """Função principal"""
     print_banner()
-    
+
     # Inicializar banco de dados
     init_db()
-    
+
     # Verificar argumentos
     args = sys.argv[1:]
-    
+
     if "--once" in args or "-1" in args:
         # Executar apenas uma vez
         print("🔄 Modo: Execução única\n")
@@ -62,29 +67,29 @@ def main():
         print_summary()
         print_signals()
         print_news_sentiment()
-        
+
     elif "--export" in args or "-e" in args:
         # Apenas exportar
         print("📤 Modo: Exportação\n")
         export_to_csv()
         export_to_json()
         print_summary()
-        
+
     elif "--summary" in args or "-s" in args:
         # Apenas mostrar resumo
         print("📊 Modo: Resumo\n")
         print_summary()
-        
+
     elif "--signals" in args:
         # Mostrar sinais de trading
         print("🚦 Modo: Trading Signals\n")
         print_signals()
-        
+
     elif "--news" in args:
         # Mostrar análise de sentimento de notícias
         print("📰 Modo: News Sentiment\n")
         print_news_sentiment()
-        
+
     elif "--ai" in args:
         # Análise detalhada para AI
         print("🤖 Modo: AI Analysis\n")
@@ -93,27 +98,29 @@ def main():
         print_news_sentiment()
         # Include Polymarket in AI analysis
         from polymarket import fetch_polymarket_sentiment, print_polymarket_summary
+
         asset_markets = fetch_polymarket_sentiment()
         print_polymarket_summary(asset_markets)
-    
+
     elif "--polymarket" in args or "-p" in args:
         # Mostrar sentimento do Polymarket
         print("🎯 Modo: Polymarket Prediction Markets\n")
         from polymarket import fetch_polymarket_sentiment, print_polymarket_summary
+
         asset_markets = fetch_polymarket_sentiment()
         print_polymarket_summary(asset_markets)
-    
+
     elif "--report" in args or "-r" in args:
         # Gerar relatórios Human (Markdown) e AI (JSON)
         print("📋 Modo: Report Generation\n")
         md_path, json_path = generate_reports()
-        print(f"\n✅ Relatórios gerados com sucesso!")
+        print("\n✅ Relatórios gerados com sucesso!")
         print(f"   📄 Human (Markdown): {md_path}")
         print(f"   🤖 AI (JSON): {json_path}")
-        
+
     elif "--help" in args or "-h" in args:
         print(__doc__)
-        
+
     else:
         # Modo padrão: scheduler
         print("🕐 Modo: Scheduler (execução contínua)\n")
