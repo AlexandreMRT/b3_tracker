@@ -47,3 +47,41 @@ exclude_lines = [
     "if __name__ == .__main__.",
     "pass",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults (FastAPI Depends)
+    "UP007",  # use X | Y for union types (keep Optional for readability)
+    "UP006",  # use dict/list instead of Dict/List (keep for consistency with existing code)
+    "UP017",  # use datetime.UTC alias (timezone.utc is more explicit and portable)
+    "UP035",  # typing.Dict deprecated (same as UP006, keep for consistency)
+    "UP045",  # use X | None instead of Optional (keep Optional for readability)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "F811"]  # import order & redefined names in test fixtures
+"tests/conftest.py" = ["E402", "F811", "I001"]  # intentional import ordering for env setup
+"src/test_multiuser.py" = ["ALL"]  # legacy manual test script
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "api", "auth", "database", "exporter", "fetcher",
+    "logger", "models", "polymarket", "portfolio",
+    "scheduler", "scoring", "signals", "users",
+]

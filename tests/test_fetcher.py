@@ -2,24 +2,24 @@
 Unit tests for the fetcher module – pure-logic functions only.
 No network calls; yfinance/feedparser are NOT invoked.
 """
-import pytest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import pytest
 
 from fetcher import (
     calculate_change_percent,
     calculate_rsi,
-    calculate_technical_indicators,
     calculate_signals,
+    calculate_technical_indicators,
 )
-
 
 # ---------------------------------------------------------------------------
 # calculate_change_percent
 # ---------------------------------------------------------------------------
 
-class TestCalculateChangePercent:
 
+class TestCalculateChangePercent:
     def test_positive_change(self):
         assert calculate_change_percent(110.0, 100.0) == pytest.approx(10.0)
 
@@ -43,8 +43,8 @@ class TestCalculateChangePercent:
 # calculate_rsi
 # ---------------------------------------------------------------------------
 
-class TestCalculateRSI:
 
+class TestCalculateRSI:
     def _make_prices(self, values):
         """Create a pandas Series from a list of prices."""
         return pd.Series(values, dtype=float)
@@ -86,17 +86,20 @@ class TestCalculateRSI:
 # calculate_technical_indicators
 # ---------------------------------------------------------------------------
 
-class TestCalculateTechnicalIndicators:
 
+class TestCalculateTechnicalIndicators:
     def _make_hist(self, n_days=250, base_price=100.0, trend=0.0):
         """Create a DataFrame mimicking yfinance historical data."""
         dates = pd.date_range(end=pd.Timestamp.now(), periods=n_days, freq="B")
         prices = base_price + trend * np.arange(n_days) + np.random.randn(n_days) * 0.5
         volumes = np.random.randint(1_000_000, 50_000_000, size=n_days)
-        return pd.DataFrame({
-            "Close": prices,
-            "Volume": volumes,
-        }, index=dates)
+        return pd.DataFrame(
+            {
+                "Close": prices,
+                "Volume": volumes,
+            },
+            index=dates,
+        )
 
     def test_ma50_calculated_with_enough_data(self):
         hist = self._make_hist(n_days=60)
@@ -146,17 +149,16 @@ class TestCalculateTechnicalIndicators:
         hist = self._make_hist(n_days=250, base_price=80.0, trend=0.1)
         result = calculate_technical_indicators(hist, current_price=110.0)
         # With uptrend, ma_50 should be above ma_200
-        if "ma_50" in result and "ma_200" in result:
-            if result["ma_50"] > result["ma_200"]:
-                assert result["ma_50_above_200"] == 1
+        if "ma_50" in result and "ma_200" in result and result["ma_50"] > result["ma_200"]:
+            assert result["ma_50_above_200"] == 1
 
 
 # ---------------------------------------------------------------------------
 # calculate_signals
 # ---------------------------------------------------------------------------
 
-class TestCalculateSignals:
 
+class TestCalculateSignals:
     def test_rsi_oversold_signal(self):
         data = {"rsi_14": 25.0}
         signals = calculate_signals(data)
@@ -210,12 +212,12 @@ class TestCalculateSignals:
     def test_bullish_summary(self):
         """A strongly bullish asset should get a 'bullish' summary."""
         data = {
-            "rsi_14": 25.0,         # oversold
+            "rsi_14": 25.0,  # oversold
             "pct_from_52w_high": -20.0,
             "week_52_high": 100.0,
             "week_52_low": 75.0,
-            "close": 77.0,          # near 52w low
-            "ma_50_above_200": 1,   # golden cross
+            "close": 77.0,  # near 52w low
+            "ma_50_above_200": 1,  # golden cross
             "above_ma_50": 1,
             "above_ma_200": 1,
             "volume_ratio": 1.5,
@@ -226,12 +228,12 @@ class TestCalculateSignals:
     def test_bearish_summary(self):
         """A strongly bearish asset should get a 'bearish' summary."""
         data = {
-            "rsi_14": 75.0,          # overbought
+            "rsi_14": 75.0,  # overbought
             "pct_from_52w_high": -2.0,
             "week_52_high": 100.0,
             "week_52_low": 60.0,
-            "close": 98.0,           # near 52w high
-            "ma_50_above_200": 0,    # death cross
+            "close": 98.0,  # near 52w high
+            "ma_50_above_200": 0,  # death cross
             "above_ma_50": 0,
             "above_ma_200": 0,
             "volume_ratio": 1.0,

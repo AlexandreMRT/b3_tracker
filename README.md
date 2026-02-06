@@ -1,5 +1,7 @@
 # 📈 B3 Tracker
 
+![Tests & Lint](https://github.com/AlexandreMRT/b3_tracker/actions/workflows/tests.yml/badge.svg)
+
 Rastreador de cotações da bolsa brasileira (B3), ações americanas, commodities e criptomoedas com análise técnica, fundamentalista e sinais de trading para alimentar modelos de AI.
 
 ## 📊 Status Atual (2026-02-05)
@@ -13,6 +15,8 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 📰 **Sentimento**: 19 notícias positivas | 7 negativas | 75 neutras  
 🧠 **Algorithmic watchlist**: scoring automático com RSI + tendência + news  
 🧪 **173 testes** passando (pytest) | **66.6% cobertura** | 0 warnings  
+🔍 **Ruff linter** — 0 errors, code formatted (isort, pycodestyle, bugbear, pyupgrade)  
+🔄 **CI/CD** — GitHub Actions (lint → tests → coverage) on every push/PR  
 📝 **Logging estruturado** via módulo centralizado (`LOG_LEVEL` configurável)  
 🐳 **Docker hardened** — non-root user, healthchecks, compose de produção  
 
@@ -32,7 +36,9 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 - 🧠 **Algorithmic watchlist** - Score por confluência de sinais e news
 - 🤖 **AI-ready exports** - JSON otimizado para modelos de machine learning
 - 🧪 **Test suite** - 173 testes (pytest) com 66.6% de cobertura
-- 📝 **Structured logging** - Módulo centralizado com níveis configuráveis
+- � **Ruff linter** - Lint + format (pycodestyle, pyflakes, isort, bugbear, pyupgrade)
+- 🔄 **CI/CD** - GitHub Actions: lint → tests → coverage em cada push/PR
+- �📝 **Structured logging** - Módulo centralizado com níveis configuráveis
 - 🐳 **Production Docker** - Non-root user, healthchecks, `docker-compose.prod.yml`
 
 ## 🚀 Quick Start
@@ -166,10 +172,13 @@ curl http://localhost:8000/api/sectors
 b3_tracker/
 ├── docker-compose.yml         # Orquestração Docker (PostgreSQL + app + api)
 ├── docker-compose.prod.yml    # Overrides de produção (sem --reload, sem volume mounts)
-├── Dockerfile                 # Imagem Python (non-root user, healthcheck)
+├── Dockerfile                 # Imagem Python (non-root user)
 ├── .dockerignore              # Exclui __pycache__, .git, .env, venv
 ├── requirements.txt           # Dependências
-├── pyproject.toml             # Configuração pytest, coverage, markers
+├── pyproject.toml             # Configuração pytest, coverage, ruff
+├── .github/
+│   └── workflows/
+│       └── tests.yml          # CI/CD: lint (Ruff) → tests (pytest) → coverage
 ├── src/
 │   ├── main.py           # CLI entry point
 │   ├── api.py            # REST API (FastAPI)
@@ -465,6 +474,22 @@ python -m pytest tests/ --cov=src --cov-report=term-missing
 python -m pytest tests/ -m unit
 ```
 
+### Linter (Ruff)
+
+```bash
+# Checar erros de lint
+ruff check src/ tests/
+
+# Auto-fix erros seguros
+ruff check src/ tests/ --fix
+
+# Checar formatação
+ruff format --check src/ tests/
+
+# Auto-formatar
+ruff format src/ tests/
+```
+
 ### Rodar localmente (sem Docker)
 
 ```bash
@@ -501,6 +526,8 @@ docker compose run --rm runner python src/main.py --export --json
 ## 🗺️ Roadmap (Resumo)
 
 **Concluído ✅**
+- CI/CD pipeline — GitHub Actions (lint → tests → coverage) on every push/PR
+- Ruff linter — lint + format enforced (pycodestyle, pyflakes, isort, bugbear, pyupgrade)
 - Test suite — 173 testes, 66.6% cobertura, 0 warnings
 - Logging estruturado — módulo centralizado substituindo print()
 - Docker hardened — non-root user, healthchecks, docker-compose.prod.yml
@@ -510,7 +537,6 @@ docker compose run --rm runner python src/main.py --export --json
 **Alta prioridade**
 - Web dashboard (React/Vue ou Jinja2 SSR) com portfólio, transações e watchlist
 - Telegram bot de alertas (RSI, cross, volume, news)
-- CI/CD pipeline (GitHub Actions)
 
 **Média prioridade**
 - Weekly email report

@@ -5,11 +5,11 @@ Single source of truth for trading signals.  Both the fetcher (which stores
 0/1 flags in the database) and the API (which returns human-readable labels)
 consume the same logic through different entry points.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, List
-
 
 # ---------------------------------------------------------------------------
 # Thresholds (single place to tune)
@@ -18,8 +18,8 @@ from typing import Any, Dict, List
 RSI_OVERSOLD = 30
 RSI_OVERBOUGHT = 70
 VOLUME_SPIKE_RATIO = 2.0
-NEAR_52W_HIGH_PCT = -5       # within 5% of 52-week high
-NEAR_52W_LOW_PCT = 5         # within 5% of 52-week low
+NEAR_52W_HIGH_PCT = -5  # within 5% of 52-week high
+NEAR_52W_LOW_PCT = 5  # within 5% of 52-week low
 NEWS_SENTIMENT_POS = 0.3
 NEWS_SENTIMENT_NEG = -0.3
 BULLISH_MIN_COUNT = 3
@@ -29,6 +29,7 @@ BEARISH_MIN_COUNT = 3
 # ---------------------------------------------------------------------------
 # Structured result
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class SignalResult:
@@ -93,6 +94,7 @@ class SignalResult:
 # ---------------------------------------------------------------------------
 # Core detection – works on plain dicts *or* ORM objects
 # ---------------------------------------------------------------------------
+
 
 def _get(source: Any, key: str, default=None):
     """Get a value from a dict or an ORM object attribute."""
@@ -165,20 +167,24 @@ def detect_signals(data: Any) -> SignalResult:
         result.negative_news = news < NEWS_SENTIMENT_NEG
 
     # Overall summary ------------------------------------------------------
-    bullish_count = sum([
-        result.rsi_oversold,
-        result.near_52w_low,
-        result.golden_cross,
-        bool(above_50),
-        bool(above_200),
-    ])
-    bearish_count = sum([
-        result.rsi_overbought,
-        result.near_52w_high,
-        result.death_cross,
-        above_50 == 0 if above_50 is not None else False,
-        above_200 == 0 if above_200 is not None else False,
-    ])
+    bullish_count = sum(
+        [
+            result.rsi_oversold,
+            result.near_52w_low,
+            result.golden_cross,
+            bool(above_50),
+            bool(above_200),
+        ]
+    )
+    bearish_count = sum(
+        [
+            result.rsi_overbought,
+            result.near_52w_high,
+            result.death_cross,
+            above_50 == 0 if above_50 is not None else False,
+            above_200 == 0 if above_200 is not None else False,
+        ]
+    )
     if bullish_count >= BULLISH_MIN_COUNT and bullish_count > bearish_count:
         result.summary = "bullish"
     elif bearish_count >= BEARISH_MIN_COUNT and bearish_count > bullish_count:

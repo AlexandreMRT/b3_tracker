@@ -1,18 +1,20 @@
 """
 Módulo para buscar cotações usando yfinance
 """
-import yfinance as yf
-from datetime import datetime, date, timedelta, timezone
-from typing import Optional
-from sqlalchemy.orm import Session
+
+import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import time
+from datetime import date, datetime, timedelta, timezone
+from typing import Optional
 
-from assets import get_all_assets, IBOVESPA_STOCKS, COMMODITIES, CRYPTO, CURRENCY, US_STOCKS
-from models import Asset, Quote
+import yfinance as yf
+from sqlalchemy.orm import Session
+
+from assets import COMMODITIES, CRYPTO, CURRENCY, IBOVESPA_STOCKS, US_STOCKS
 from database import SessionLocal
 from logger import get_logger
+from models import Asset, Quote
 
 logger = get_logger(__name__)
 
@@ -20,35 +22,79 @@ logger = get_logger(__name__)
 try:
     import nltk
     from nltk.sentiment.vader import SentimentIntensityAnalyzer
+
     try:
-        nltk.data.find('sentiment/vader_lexicon.zip')
+        nltk.data.find("sentiment/vader_lexicon.zip")
     except LookupError:
-        nltk.download('vader_lexicon', quiet=True)
+        nltk.download("vader_lexicon", quiet=True)
     _vader = SentimentIntensityAnalyzer()
-    
+
     # Add Portuguese financial keywords to VADER lexicon
     # Positive words
     pt_positive = {
-        'alta': 2.0, 'subiu': 2.0, 'sobe': 1.5, 'valoriza': 2.0, 'valorização': 2.0,
-        'lucro': 2.5, 'lucros': 2.5, 'crescimento': 1.5, 'cresce': 1.5, 'cresceu': 1.5,
-        'recorde': 2.0, 'positivo': 1.5, 'otimista': 1.5, 'supera': 1.5, 'superou': 1.5,
-        'dividendos': 1.5, 'rentabilidade': 1.5, 'aprovação': 1.5, 'aprovado': 1.5,
-        'expansão': 1.5, 'expande': 1.5, 'contrato': 1.0, 'parceria': 1.0,
-        'aquisição': 1.0, 'investimento': 1.0, 'recomendação': 0.5, 'compra': 1.0,
+        "alta": 2.0,
+        "subiu": 2.0,
+        "sobe": 1.5,
+        "valoriza": 2.0,
+        "valorização": 2.0,
+        "lucro": 2.5,
+        "lucros": 2.5,
+        "crescimento": 1.5,
+        "cresce": 1.5,
+        "cresceu": 1.5,
+        "recorde": 2.0,
+        "positivo": 1.5,
+        "otimista": 1.5,
+        "supera": 1.5,
+        "superou": 1.5,
+        "dividendos": 1.5,
+        "rentabilidade": 1.5,
+        "aprovação": 1.5,
+        "aprovado": 1.5,
+        "expansão": 1.5,
+        "expande": 1.5,
+        "contrato": 1.0,
+        "parceria": 1.0,
+        "aquisição": 1.0,
+        "investimento": 1.0,
+        "recomendação": 0.5,
+        "compra": 1.0,
     }
     # Negative words
     pt_negative = {
-        'queda': -2.0, 'caiu': -2.0, 'cai': -1.5, 'desvaloriza': -2.0, 'desvalorização': -2.0,
-        'prejuízo': -2.5, 'prejuízos': -2.5, 'perdas': -2.0, 'perda': -2.0,
-        'negativo': -1.5, 'pessimista': -1.5, 'rebaixado': -2.0, 'rebaixa': -2.0,
-        'dívida': -1.5, 'dívidas': -1.5, 'endividamento': -1.5, 'risco': -1.0,
-        'crise': -2.0, 'problema': -1.5, 'problemas': -1.5, 'investigação': -1.5,
-        'multa': -2.0, 'fraude': -3.0, 'demissão': -1.5, 'demissões': -1.5,
-        'rombo': -2.5, 'escândalo': -3.0, 'falência': -3.0, 'recuperação judicial': -2.5,
+        "queda": -2.0,
+        "caiu": -2.0,
+        "cai": -1.5,
+        "desvaloriza": -2.0,
+        "desvalorização": -2.0,
+        "prejuízo": -2.5,
+        "prejuízos": -2.5,
+        "perdas": -2.0,
+        "perda": -2.0,
+        "negativo": -1.5,
+        "pessimista": -1.5,
+        "rebaixado": -2.0,
+        "rebaixa": -2.0,
+        "dívida": -1.5,
+        "dívidas": -1.5,
+        "endividamento": -1.5,
+        "risco": -1.0,
+        "crise": -2.0,
+        "problema": -1.5,
+        "problemas": -1.5,
+        "investigação": -1.5,
+        "multa": -2.0,
+        "fraude": -3.0,
+        "demissão": -1.5,
+        "demissões": -1.5,
+        "rombo": -2.5,
+        "escândalo": -3.0,
+        "falência": -3.0,
+        "recuperação judicial": -2.5,
     }
     _vader.lexicon.update(pt_positive)
     _vader.lexicon.update(pt_negative)
-    
+
 except Exception as e:
     logger.warning(f"⚠️ VADER not available: {e}")
     _vader = None
@@ -56,6 +102,7 @@ except Exception as e:
 # Initialize feedparser for Google News RSS
 try:
     import feedparser
+
     _feedparser_available = True
 except Exception as e:
     logger.warning(f"⚠️ feedparser not available: {e}")
@@ -69,10 +116,10 @@ def get_usd_brl_rate() -> float:
         # Usar período maior para garantir dados
         data = ticker.history(period="5d")
         if not data.empty:
-            return float(data['Close'].iloc[-1])
+            return float(data["Close"].iloc[-1])
     except Exception as e:
         logger.warning(f"⚠️ Erro ao buscar cotação USD/BRL: {e}")
-    
+
     # Fallback: valor aproximado
     return 6.20
 
@@ -88,17 +135,17 @@ def calculate_rsi(prices, period: int = 14) -> Optional[float]:
     """Calculate Relative Strength Index"""
     if len(prices) < period + 1:
         return None
-    
+
     deltas = prices.diff()
     gains = deltas.where(deltas > 0, 0)
     losses = (-deltas).where(deltas < 0, 0)
-    
+
     avg_gain = gains.rolling(window=period).mean().iloc[-1]
     avg_loss = losses.rolling(window=period).mean().iloc[-1]
-    
+
     if avg_loss == 0:
         return 100.0
-    
+
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
     return float(rsi)
@@ -108,14 +155,14 @@ def fetch_fundamental_data(ticker: yf.Ticker) -> dict:
     """Fetch fundamental and analyst data from yfinance"""
     try:
         info = ticker.info
-        
+
         # Safe getter for percentages
         def safe_pct(key):
             val = info.get(key)
             if val is not None:
                 return val * 100 if val < 1 else val  # Handle if already in %
             return None
-        
+
         return {
             # Fundamentals
             "market_cap": info.get("marketCap"),
@@ -124,17 +171,14 @@ def fetch_fundamental_data(ticker: yf.Ticker) -> dict:
             "pb_ratio": info.get("priceToBook"),
             "dividend_yield": safe_pct("dividendYield"),
             "eps": info.get("trailingEps"),
-            
             # Risk metrics
             "beta": info.get("beta"),
             "week_52_high": info.get("fiftyTwoWeekHigh"),
             "week_52_low": info.get("fiftyTwoWeekLow"),
-            
             # Financial health
             "profit_margin": safe_pct("profitMargins"),
             "roe": safe_pct("returnOnEquity"),
             "debt_to_equity": info.get("debtToEquity"),
-            
             # Analyst data
             "analyst_rating": info.get("recommendationKey"),
             "target_price": info.get("targetMeanPrice"),
@@ -148,38 +192,38 @@ def fetch_fundamental_data(ticker: yf.Ticker) -> dict:
 def calculate_technical_indicators(hist, current_price: float) -> dict:
     """Calculate technical indicators from historical data"""
     result = {}
-    
+
     if len(hist) >= 50:
-        ma_50 = float(hist['Close'].tail(50).mean())
+        ma_50 = float(hist["Close"].tail(50).mean())
         result["ma_50"] = ma_50
         result["above_ma_50"] = 1 if current_price > ma_50 else 0
-    
+
     if len(hist) >= 200:
-        ma_200 = float(hist['Close'].tail(200).mean())
+        ma_200 = float(hist["Close"].tail(200).mean())
         result["ma_200"] = ma_200
         result["above_ma_200"] = 1 if current_price > ma_200 else 0
-        
+
         if "ma_50" in result:
             result["ma_50_above_200"] = 1 if result["ma_50"] > ma_200 else 0
-    
+
     # RSI
-    rsi = calculate_rsi(hist['Close'])
+    rsi = calculate_rsi(hist["Close"])
     if rsi is not None:
         result["rsi_14"] = rsi
-    
+
     # Volatility (30-day standard deviation of daily returns)
     if len(hist) >= 30:
-        returns = hist['Close'].pct_change().tail(30)
+        returns = hist["Close"].pct_change().tail(30)
         result["volatility_30d"] = float(returns.std() * 100)  # As percentage
-    
+
     # Volume analysis
-    if len(hist) >= 20 and 'Volume' in hist.columns:
-        avg_vol = float(hist['Volume'].tail(20).mean())
-        current_vol = float(hist['Volume'].iloc[-1])
+    if len(hist) >= 20 and "Volume" in hist.columns:
+        avg_vol = float(hist["Volume"].tail(20).mean())
+        current_vol = float(hist["Volume"].iloc[-1])
         result["avg_volume_20d"] = avg_vol
         if avg_vol > 0:
             result["volume_ratio"] = current_vol / avg_vol
-    
+
     return result
 
 
@@ -189,6 +233,7 @@ def calculate_signals(quote_data: dict) -> dict:
     Delegates to the shared ``signals`` module and returns DB-ready 0/1 flags.
     """
     from signals import detect_signals as _detect
+
     return _detect(quote_data).as_db_flags()
 
 
@@ -197,23 +242,25 @@ def fetch_news_english(ticker_symbol: str, max_news: int = 10) -> list:
     try:
         ticker = yf.Ticker(ticker_symbol)
         news = ticker.news
-        
+
         if not news:
             return []
-        
+
         results = []
         for item in news[:max_news]:
             title = item.get("title", "")
             # yfinance news structure: use content summary if available
             content = item.get("summary", item.get("description", ""))
             text = f"{title}. {content}" if content else title
-            results.append({
-                "title": title,
-                "text": text,
-                "source": item.get("publisher", ""),
-                "link": item.get("link", ""),
-            })
-        
+            results.append(
+                {
+                    "title": title,
+                    "text": text,
+                    "source": item.get("publisher", ""),
+                    "link": item.get("link", ""),
+                }
+            )
+
         return results
     except Exception as e:
         logger.warning(f"⚠️ Error fetching EN news for {ticker_symbol}: {e}")
@@ -224,35 +271,37 @@ def fetch_news_portuguese(company_name: str, ticker: str, max_news: int = 10) ->
     """Fetch Portuguese news from Google News RSS"""
     if not _feedparser_available:
         return []
-    
+
     try:
         # Clean ticker for search (remove .SA)
         clean_ticker = ticker.replace(".SA", "")
-        
+
         # Search for company name and ticker
         search_query = f"{company_name} OR {clean_ticker} ações bolsa"
         encoded_query = urllib.parse.quote(search_query)
-        
+
         # Google News RSS for Portuguese (Brazil)
         rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=pt-BR&gl=BR&ceid=BR:pt-419"
-        
+
         feed = feedparser.parse(rss_url)
-        
+
         if not feed.entries:
             return []
-        
+
         results = []
         for entry in feed.entries[:max_news]:
             title = entry.get("title", "")
             summary = entry.get("summary", "")
             text = f"{title}. {summary}" if summary else title
-            results.append({
-                "title": title,
-                "text": text,
-                "source": entry.get("source", {}).get("title", "Google News"),
-                "link": entry.get("link", ""),
-            })
-        
+            results.append(
+                {
+                    "title": title,
+                    "text": text,
+                    "source": entry.get("source", {}).get("title", "Google News"),
+                    "link": entry.get("link", ""),
+                }
+            )
+
         return results
     except Exception as e:
         logger.warning(f"⚠️ Error fetching PT news for {company_name}: {e}")
@@ -263,21 +312,21 @@ def analyze_sentiment_english(texts: list) -> tuple:
     """Analyze sentiment of English texts using VADER"""
     if not _vader or not texts:
         return None, None
-    
+
     scores = []
     for item in texts:
         text = item.get("text", item) if isinstance(item, dict) else item
         if text:
             score = _vader.polarity_scores(text)
             scores.append(score["compound"])
-    
+
     if not scores:
         return None, None
-    
+
     avg_score = sum(scores) / len(scores)
     # Get the headline from the first (most recent) article
     headline = texts[0].get("title", "") if texts and isinstance(texts[0], dict) else ""
-    
+
     return avg_score, headline
 
 
@@ -285,7 +334,7 @@ def analyze_sentiment_portuguese(texts: list) -> tuple:
     """Analyze sentiment of Portuguese texts using enhanced VADER with PT keywords"""
     if not _vader or not texts:
         return None, None
-    
+
     scores = []
     for item in texts:
         text = item.get("text", item) if isinstance(item, dict) else item
@@ -293,26 +342,26 @@ def analyze_sentiment_portuguese(texts: list) -> tuple:
             # Lowercase for better PT keyword matching
             score = _vader.polarity_scores(text.lower())
             scores.append(score["compound"])
-    
+
     if not scores:
         return None, None
-    
+
     avg_score = sum(scores) / len(scores)
     # Get the headline from the first (most recent) article
     headline = texts[0].get("title", "") if texts and isinstance(texts[0], dict) else ""
-    
+
     return avg_score, headline
 
 
 def fetch_news_sentiment(ticker_symbol: str, company_name: str, is_brazilian: bool = True) -> dict:
     """
     Fetch and analyze news sentiment for a stock
-    
+
     Args:
         ticker_symbol: Stock ticker (e.g., "PETR4.SA", "AAPL")
         company_name: Company name for search
         is_brazilian: Whether this is a Brazilian stock (triggers PT-BR search)
-    
+
     Returns:
         dict with sentiment scores and headlines
     """
@@ -326,7 +375,7 @@ def fetch_news_sentiment(ticker_symbol: str, company_name: str, is_brazilian: bo
         "news_headline_en": None,
         "news_sentiment_label": None,
     }
-    
+
     # Fetch English news (always, using yfinance)
     en_news = fetch_news_english(ticker_symbol)
     if en_news:
@@ -335,7 +384,7 @@ def fetch_news_sentiment(ticker_symbol: str, company_name: str, is_brazilian: bo
         if score is not None:
             result["news_sentiment_en"] = score
             result["news_headline_en"] = headline[:500] if headline else None
-    
+
     # Fetch Portuguese news (for Brazilian stocks)
     if is_brazilian:
         pt_news = fetch_news_portuguese(company_name, ticker_symbol)
@@ -345,11 +394,11 @@ def fetch_news_sentiment(ticker_symbol: str, company_name: str, is_brazilian: bo
             if score is not None:
                 result["news_sentiment_pt"] = score
                 result["news_headline_pt"] = headline[:500] if headline else None
-    
+
     # Calculate combined score
     pt_score = result["news_sentiment_pt"]
     en_score = result["news_sentiment_en"]
-    
+
     if pt_score is not None and en_score is not None:
         # Weight: 60% local (PT), 40% international (EN) for Brazilian stocks
         result["news_sentiment_combined"] = (pt_score * 0.6) + (en_score * 0.4)
@@ -357,7 +406,7 @@ def fetch_news_sentiment(ticker_symbol: str, company_name: str, is_brazilian: bo
         result["news_sentiment_combined"] = pt_score
     elif en_score is not None:
         result["news_sentiment_combined"] = en_score
-    
+
     # Determine label
     combined = result["news_sentiment_combined"]
     if combined is not None:
@@ -367,7 +416,7 @@ def fetch_news_sentiment(ticker_symbol: str, company_name: str, is_brazilian: bo
             result["news_sentiment_label"] = "negative"
         else:
             result["news_sentiment_label"] = "neutral"
-    
+
     return result
 
 
@@ -378,51 +427,51 @@ _benchmark_cache = {}
 def fetch_benchmark_data() -> dict:
     """Fetch Ibovespa and S&P 500 historical changes (cached)"""
     global _benchmark_cache
-    
+
     if _benchmark_cache:
         return _benchmark_cache
-    
+
     logger.info("📊 Buscando dados de benchmark (IBOV, S&P500)...")
-    
+
     benchmarks = {
-        "^BVSP": "ibov",   # Ibovespa
+        "^BVSP": "ibov",  # Ibovespa
         "^GSPC": "sp500",  # S&P 500
     }
-    
+
     result = {}
-    
+
     for ticker_symbol, prefix in benchmarks.items():
         try:
             ticker = yf.Ticker(ticker_symbol)
             hist = ticker.history(period="1y")
-            
+
             if hist.empty:
                 continue
-            
+
             today = hist.index[-1].date()
-            current_price = float(hist['Close'].iloc[-1])
-            
+            current_price = float(hist["Close"].iloc[-1])
+
             # Calculate changes
             date_1d = today - timedelta(days=1)
             date_1w = today - timedelta(weeks=1)
             date_1m = today - timedelta(days=30)
             date_ytd = date(today.year, 1, 1)
-            
+
             price_1d = get_historical_price(hist, date_1d)
             price_1w = get_historical_price(hist, date_1w)
             price_1m = get_historical_price(hist, date_1m)
             price_ytd = get_historical_price(hist, date_ytd)
-            
+
             result[f"{prefix}_change_1d"] = calculate_change_percent(current_price, price_1d)
             result[f"{prefix}_change_1w"] = calculate_change_percent(current_price, price_1w)
             result[f"{prefix}_change_1m"] = calculate_change_percent(current_price, price_1m)
             result[f"{prefix}_change_ytd"] = calculate_change_percent(current_price, price_ytd)
-            
+
             logger.info(f"✅ {ticker_symbol}: YTD {result[f'{prefix}_change_ytd']:.1f}%")
-            
+
         except Exception as e:
             logger.warning(f"⚠️ Error fetching {ticker_symbol}: {e}")
-    
+
     _benchmark_cache = result
     return result
 
@@ -430,11 +479,11 @@ def fetch_benchmark_data() -> dict:
 def calculate_benchmark_comparison(quote_data: dict, benchmarks: dict) -> dict:
     """Calculate outperformance vs benchmarks"""
     result = {}
-    
+
     # Copy benchmark data
     for key, value in benchmarks.items():
         result[key] = value
-    
+
     # Calculate outperformance vs Ibovespa
     if quote_data.get("change_1d") and benchmarks.get("ibov_change_1d"):
         result["vs_ibov_1d"] = quote_data["change_1d"] - benchmarks["ibov_change_1d"]
@@ -442,7 +491,7 @@ def calculate_benchmark_comparison(quote_data: dict, benchmarks: dict) -> dict:
         result["vs_ibov_1m"] = quote_data["change_1m"] - benchmarks["ibov_change_1m"]
     if quote_data.get("change_ytd") and benchmarks.get("ibov_change_ytd"):
         result["vs_ibov_ytd"] = quote_data["change_ytd"] - benchmarks["ibov_change_ytd"]
-    
+
     # Calculate outperformance vs S&P 500
     if quote_data.get("change_1d") and benchmarks.get("sp500_change_1d"):
         result["vs_sp500_1d"] = quote_data["change_1d"] - benchmarks["sp500_change_1d"]
@@ -450,7 +499,7 @@ def calculate_benchmark_comparison(quote_data: dict, benchmarks: dict) -> dict:
         result["vs_sp500_1m"] = quote_data["change_1m"] - benchmarks["sp500_change_1m"]
     if quote_data.get("change_ytd") and benchmarks.get("sp500_change_ytd"):
         result["vs_sp500_ytd"] = quote_data["change_ytd"] - benchmarks["sp500_change_ytd"]
-    
+
     return result
 
 
@@ -458,76 +507,73 @@ def get_historical_price(hist_data, target_date: date) -> Optional[float]:
     """Obtém o preço de fechamento mais próximo de uma data alvo"""
     if hist_data.empty:
         return None
-    
-    # Converter índice para dates
-    hist_dates = hist_data.index.date if hasattr(hist_data.index, 'date') else hist_data.index
-    
+
     # Procurar a data alvo ou a mais próxima anterior
     for i in range(len(hist_data) - 1, -1, -1):
         if hist_data.index[i].date() <= target_date:
-            return float(hist_data['Close'].iloc[i])
-    
+            return float(hist_data["Close"].iloc[i])
+
     return None
 
 
 def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
     """
     Busca a cotação de um ativo com dados históricos, fundamentais e técnicos
-    
+
     Returns:
         dict com dados completos para análise de AI ou None se falhar
     """
     try:
         ticker = yf.Ticker(ticker_symbol)
-        
+
         # Buscar dados máximos para cobrir todas as comparações (5Y e ALL)
         hist = ticker.history(period="max")
-        
+
         if hist.empty:
             logger.warning(f"⚠️ Sem dados para {ticker_symbol}")
             return None
-        
+
         latest = hist.iloc[-1]
         today = hist.index[-1].date()
-        
+
         # Calcular datas de referência
         date_1d = today - timedelta(days=1)
         date_1w = today - timedelta(weeks=1)
         date_1m = today - timedelta(days=30)
         date_ytd = date(today.year, 1, 1)
-        date_5y = today - timedelta(days=5*365)
-        
+        date_5y = today - timedelta(days=5 * 365)
+
         # Obter preços históricos
         price_1d = get_historical_price(hist, date_1d)
         price_1w = get_historical_price(hist, date_1w)
         price_1m = get_historical_price(hist, date_1m)
         price_ytd = get_historical_price(hist, date_ytd)
         price_5y = get_historical_price(hist, date_5y)
-        
+
         # Primeiro preço disponível (all-time)
-        price_all = float(hist['Close'].iloc[0]) if len(hist) > 0 else None
-        
-        current_price = float(latest['Close'])
-        
+        price_all = float(hist["Close"].iloc[0]) if len(hist) > 0 else None
+
+        current_price = float(latest["Close"])
+
         # Fetch fundamental data
         fundamentals = fetch_fundamental_data(ticker)
-        
+
         # Calculate technical indicators
         technicals = calculate_technical_indicators(hist, current_price)
-        
+
         # Calculate % from 52-week high
         week_52_high = fundamentals.get("week_52_high")
         pct_from_52w_high = None
         if week_52_high and week_52_high > 0:
             pct_from_52w_high = ((current_price - week_52_high) / week_52_high) * 100
-        
+
         result = {
             "ticker": ticker_symbol,
-            "open": float(latest.get('Open', 0)) if latest.get('Open') else None,
-            "high": float(latest.get('High', 0)) if latest.get('High') else None,
-            "low": float(latest.get('Low', 0)) if latest.get('Low') else None,
+            "open": float(latest.get("Open", 0)) if latest.get("Open") else None,
+            "high": float(latest.get("High", 0)) if latest.get("High") else None,
+            "low": float(latest.get("Low", 0)) if latest.get("Low") else None,
             "close": current_price,
-            "volume": float(latest.get('Volume', 0)) if latest.get('Volume') else None,
+            "volume": float(latest.get("Volume", 0)) if latest.get("Volume") else None,
             "date": hist.index[-1].to_pydatetime().replace(tzinfo=None),
             # Preços históricos
             "price_1d": price_1d,
@@ -546,17 +592,17 @@ def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
             # % from 52-week high
             "pct_from_52w_high": pct_from_52w_high,
         }
-        
+
         # Merge fundamentals and technicals
         result.update(fundamentals)
         result.update(technicals)
-        
+
         # Calculate signals
         signals = calculate_signals(result)
         result.update(signals)
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"❌ Erro ao buscar {ticker_symbol}: {e}")
         return None
@@ -565,7 +611,7 @@ def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
 def fetch_quote(ticker_symbol: str) -> Optional[dict]:
     """
     Busca a cotação de um ativo específico
-    
+
     Returns:
         dict com dados da cotação ou None se falhar
     """
@@ -573,23 +619,23 @@ def fetch_quote(ticker_symbol: str) -> Optional[dict]:
         ticker = yf.Ticker(ticker_symbol)
         # Use 5d period to handle weekends/holidays when markets are closed
         hist = ticker.history(period="5d")
-        
+
         if hist.empty:
             logger.warning(f"⚠️ Sem dados para {ticker_symbol}")
             return None
-        
+
         latest = hist.iloc[-1]
-        
+
         return {
             "ticker": ticker_symbol,
-            "open": float(latest.get('Open', 0)) if latest.get('Open') else None,
-            "high": float(latest.get('High', 0)) if latest.get('High') else None,
-            "low": float(latest.get('Low', 0)) if latest.get('Low') else None,
-            "close": float(latest['Close']),
-            "volume": float(latest.get('Volume', 0)) if latest.get('Volume') else None,
-            "date": hist.index[-1].to_pydatetime().replace(tzinfo=None)
+            "open": float(latest.get("Open", 0)) if latest.get("Open") else None,
+            "high": float(latest.get("High", 0)) if latest.get("High") else None,
+            "low": float(latest.get("Low", 0)) if latest.get("Low") else None,
+            "close": float(latest["Close"]),
+            "volume": float(latest.get("Volume", 0)) if latest.get("Volume") else None,
+            "date": hist.index[-1].to_pydatetime().replace(tzinfo=None),
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Erro ao buscar {ticker_symbol}: {e}")
         return None
@@ -598,20 +644,20 @@ def fetch_quote(ticker_symbol: str) -> Optional[dict]:
 def get_or_create_asset(db: Session, ticker: str, info: dict, asset_type: str) -> Asset:
     """Obtém ou cria um ativo no banco de dados"""
     asset = db.query(Asset).filter(Asset.ticker == ticker).first()
-    
+
     if not asset:
         asset = Asset(
             ticker=ticker,
             name=info.get("name", "Desconhecido"),
             sector=info.get("sector", "Outro"),
             asset_type=asset_type,
-            unit=info.get("unit", "")
+            unit=info.get("unit", ""),
         )
         db.add(asset)
         db.commit()
         db.refresh(asset)
         logger.info(f"✅ Ativo criado: {ticker} - {info.get('name')}")
-    
+
     return asset
 
 
@@ -709,16 +755,17 @@ def _build_quote_fields(quote_data: dict, price_brl: float, price_usd: float = N
 def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, price_usd: float = None):
     """Salva uma cotação no banco de dados com dados históricos"""
     quote_date = quote_data["date"].date() if isinstance(quote_data["date"], datetime) else quote_data["date"]
-    
+
     # Build the shared field values once – used for both update and create
     field_values = _build_quote_fields(quote_data, price_brl, price_usd)
-    
+
     # Verificar se já existe cotação para este ativo nesta data
-    existing = db.query(Quote).filter(
-        Quote.asset_id == asset.id,
-        Quote.quote_date == datetime.combine(quote_date, datetime.min.time())
-    ).first()
-    
+    existing = (
+        db.query(Quote)
+        .filter(Quote.asset_id == asset.id, Quote.quote_date == datetime.combine(quote_date, datetime.min.time()))
+        .first()
+    )
+
     if existing:
         # Atualizar cotação existente
         for attr, value in field_values.items():
@@ -734,16 +781,17 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
         )
         db.add(quote)
         logger.info(f"💰 Salvo: {asset.ticker} = R$ {price_brl:.2f}")
-    
+
     db.commit()
 
 
-def fetch_single_asset(ticker: str, info: dict, asset_type: str, is_brazilian: bool, 
-                       usd_brl: float, benchmarks: dict) -> Optional[dict]:
+def fetch_single_asset(
+    ticker: str, info: dict, asset_type: str, is_brazilian: bool, usd_brl: float, benchmarks: dict
+) -> Optional[dict]:
     """
     Fetch a single asset's quote, news, and prepare data for saving.
     This function is designed to be called in parallel.
-    
+
     Returns:
         dict with all data needed for saving, or None if fetch failed
     """
@@ -751,11 +799,11 @@ def fetch_single_asset(ticker: str, info: dict, asset_type: str, is_brazilian: b
         quote_data = fetch_quote_with_history(ticker)
         if not quote_data:
             return None
-        
+
         # Add benchmark comparison
         benchmark_comparison = calculate_benchmark_comparison(quote_data, benchmarks)
         quote_data.update(benchmark_comparison)
-        
+
         # Calculate prices based on asset type
         if asset_type == "stock":
             # Brazilian stock: price is in BRL
@@ -769,7 +817,7 @@ def fetch_single_asset(ticker: str, info: dict, asset_type: str, is_brazilian: b
             # US stock, commodity, crypto: price is in USD
             price_usd = quote_data["close"]
             price_brl = price_usd * usd_brl
-        
+
         return {
             "ticker": ticker,
             "info": info,
@@ -791,90 +839,90 @@ def fetch_news_for_asset(result: dict) -> dict:
     """
     if result is None:
         return result
-    
+
     asset_type = result["asset_type"]
-    
+
     # Only fetch news for stocks
     if asset_type in ("stock", "us_stock"):
         ticker = result["ticker"]
         info = result["info"]
         is_brazilian = result["is_brazilian"]
-        
+
         news_data = fetch_news_sentiment(ticker, info.get("name", ""), is_brazilian=is_brazilian)
         result["quote_data"].update(news_data)
-    
+
     return result
 
 
 def fetch_all_quotes():
     """Busca e salva cotações de todos os ativos (versão paralela)"""
-    
+
     total_start = time.time()
-    
+
     logger.info("=" * 60)
     logger.info(f"🚀 Iniciando busca de cotações - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
-    
+
     # =========================================================================
     # FASE 1: Prerequisites (paralelo)
     # =========================================================================
     phase1_start = time.time()
     logger.info("📊 Fase 1: Buscando dados de referência...")
-    
+
     with ThreadPoolExecutor(max_workers=3) as executor:
         usd_future = executor.submit(get_usd_brl_rate)
         bench_future = executor.submit(fetch_benchmark_data)
-        
+
         usd_brl = usd_future.result()
         benchmarks = bench_future.result()
-    
+
     logger.info(f"💵 USD/BRL: R$ {usd_brl:.4f}")
     logger.info(f"⏱️  Fase 1 concluída em {time.time() - phase1_start:.1f}s")
-    
+
     # =========================================================================
     # FASE 2: Prepare all assets
     # =========================================================================
     all_assets = []
-    
+
     # Brazilian stocks
     for ticker, info in IBOVESPA_STOCKS.items():
         all_assets.append((ticker, info, "stock", True))
-    
+
     # US stocks
     for ticker, info in US_STOCKS.items():
         all_assets.append((ticker, info, "us_stock", False))
-    
+
     # Commodities
     for ticker, info in COMMODITIES.items():
         all_assets.append((ticker, info, "commodity", False))
-    
+
     # Crypto
     for ticker, info in CRYPTO.items():
         all_assets.append((ticker, info, "crypto", False))
-    
+
     # Currency
     for ticker, info in CURRENCY.items():
         all_assets.append((ticker, info, "currency", False))
-    
+
     total_assets = len(all_assets)
     logger.info(f"📈 Total de ativos para buscar: {total_assets}")
-    
+
     # =========================================================================
     # FASE 2: Fetch all quotes in parallel
     # =========================================================================
     phase2_start = time.time()
-    logger.info(f"📊 Fase 2: Buscando cotações (8 workers paralelos)...")
-    
+    logger.info("📊 Fase 2: Buscando cotações (8 workers paralelos)...")
+
     results = []
     success_count = 0
     error_count = 0
-    
+
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
             executor.submit(fetch_single_asset, ticker, info, asset_type, is_br, usd_brl, benchmarks): ticker
             for ticker, info, asset_type, is_br in all_assets
         }
-        
+
         for future in as_completed(futures):
             ticker = futures[future]
             try:
@@ -887,78 +935,68 @@ def fetch_all_quotes():
             except Exception as e:
                 logger.error(f"❌ Error processing {ticker}: {e}")
                 error_count += 1
-    
+
     logger.info(f"✅ Cotações: {success_count} sucesso, {error_count} erros")
     logger.info(f"⏱️  Fase 2 concluída em {time.time() - phase2_start:.1f}s")
-    
+
     # =========================================================================
     # FASE 3: Fetch news in parallel (only for stocks)
     # =========================================================================
     phase3_start = time.time()
     stocks_only = [r for r in results if r["asset_type"] in ("stock", "us_stock")]
     logger.info(f"📰 Fase 3: Buscando notícias para {len(stocks_only)} ações (5 workers)...")
-    
+
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(fetch_news_for_asset, r): r["ticker"] for r in stocks_only}
-        
+
         for future in as_completed(futures):
             try:
                 future.result()  # Just ensure it completes
             except Exception as e:
                 ticker = futures[future]
                 logger.warning(f"⚠️ News error for {ticker}: {e}")
-    
+
     logger.info(f"⏱️  Fase 3 concluída em {time.time() - phase3_start:.1f}s")
-    
+
     # =========================================================================
     # FASE 4: Save all to database (sequential - SQLite safe)
     # =========================================================================
     phase4_start = time.time()
     logger.info(f"💾 Fase 4: Salvando {len(results)} registros no banco...")
-    
+
     db = SessionLocal()
     try:
         saved_count = 0
         for result in results:
             try:
-                asset = get_or_create_asset(
-                    db, 
-                    result["ticker"], 
-                    result["info"], 
-                    result["asset_type"]
-                )
-                save_quote(
-                    db, 
-                    asset, 
-                    result["quote_data"], 
-                    result["price_brl"], 
-                    result["price_usd"]
-                )
+                asset = get_or_create_asset(db, result["ticker"], result["info"], result["asset_type"])
+                save_quote(db, asset, result["quote_data"], result["price_brl"], result["price_usd"])
                 saved_count += 1
             except Exception as e:
                 logger.error(f"❌ Error saving {result['ticker']}: {e}")
-        
+
         logger.info(f"✅ Salvos: {saved_count} registros")
         logger.info(f"⏱️  Fase 4 concluída em {time.time() - phase4_start:.1f}s")
-        
+
     finally:
         db.close()
-    
+
     # =========================================================================
     # SUMMARY
     # =========================================================================
     total_time = time.time() - total_start
     logger.info("=" * 60)
-    logger.info(f"✅ CONCLUÍDO!")
+    logger.info("✅ CONCLUÍDO!")
     logger.info(f"📊 Ativos processados: {success_count}/{total_assets}")
-    logger.info(f"⏱️  Tempo total: {total_time:.1f}s ({total_time/60:.1f} min)")
-    logger.info(f"🚀 Velocidade: {total_assets/total_time:.1f} ativos/segundo")
+    logger.info(f"⏱️  Tempo total: {total_time:.1f}s ({total_time / 60:.1f} min)")
+    logger.info(f"🚀 Velocidade: {total_assets / total_time:.1f} ativos/segundo")
     logger.info("=" * 60)
-    
+
     return success_count, error_count
 
 
 if __name__ == "__main__":
     from database import init_db
+
     init_db()
     fetch_all_quotes()

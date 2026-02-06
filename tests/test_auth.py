@@ -2,16 +2,17 @@
 Unit tests for auth module – JWT creation and verification.
 No network, no Google OAuth (those require integration tests).
 """
-import pytest
+
 import uuid
 from datetime import timedelta
 
-from auth import create_access_token, verify_token
+import pytest
 from fastapi import HTTPException
+
+from auth import create_access_token, verify_token
 
 
 class TestJWTTokens:
-
     def test_create_and_verify_token(self):
         user_id = str(uuid.uuid4())
         token = create_access_token(data={"sub": user_id})

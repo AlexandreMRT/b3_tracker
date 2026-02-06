@@ -1,16 +1,19 @@
 """
 Authentication module with Google OAuth 2.0 and JWT tokens
 """
+
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+from authlib.integrations.starlette_client import OAuth
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from authlib.integrations.starlette_client import OAuth
-from models import User
+
 from database import get_db
+from models import User
 
 # Configuration
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev_secret_key_change_in_production")
@@ -29,13 +32,11 @@ oauth = OAuth()
 
 if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
     oauth.register(
-        name='google',
+        name="google",
         client_id=GOOGLE_CLIENT_ID,
         client_secret=GOOGLE_CLIENT_SECRET,
-        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-        client_kwargs={
-            'scope': 'openid email profile'
-        }
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
     )
 
 
@@ -46,7 +47,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -58,7 +59,7 @@ def verify_token(token: str) -> dict:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError:
-        raise HTTPException(
+        raise HTTPException(  # noqa: B904
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
@@ -66,21 +67,20 @@ def verify_token(token: str) -> dict:
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)
 ) -> User:
     """Get current authenticated user from JWT token"""
     token = credentials.credentials
     payload = verify_token(token)
     user_id: str = payload.get("sub")
-    
+
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(
@@ -88,11 +88,11 @@ def get_current_user(
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Update last login
     user.last_login = datetime.now(timezone.utc)
     db.commit()
-    
+
     return user
 
 
@@ -100,7 +100,7 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
     """Get existing user or create new one from Google OAuth data"""
     # Try to find existing user by google_id
     user = db.query(User).filter(User.google_id == google_id).first()
-    
+
     if user:
         # Update user info in case it changed
         user.name = name
@@ -109,10 +109,10 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
         db.commit()
         db.refresh(user)
         return user
-    
+
     # Try to find by email (in case user signed up before)
     user = db.query(User).filter(User.email == email).first()
-    
+
     if user:
         # Link Google account to existing user
         user.google_id = google_id
@@ -121,7 +121,7 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
         db.commit()
         db.refresh(user)
         return user
-    
+
     # Create new user
     user = User(
         google_id=google_id,
@@ -129,25 +129,24 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
         name=name,
         picture_url=picture_url,
         created_at=datetime.now(timezone.utc),
-        last_login=datetime.now(timezone.utc)
+        last_login=datetime.now(timezone.utc),
     )
-    
+
     db.add(user)
     db.commit()
     db.refresh(user)
-    
+
     return user
 
 
 # Optional: Get current user but allow None (for optional authentication)
 def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security), db: Session = Depends(get_db)
 ) -> Optional[User]:
     """Get current user if authenticated, otherwise return None"""
     if not credentials:
         return None
-    
+
     try:
         return get_current_user(credentials, db)
     except HTTPException:

@@ -10,10 +10,10 @@ Or import the pre-configured logger:
     from logger import get_logger
     logger = get_logger(__name__)
 """
+
 import logging
 import os
 import sys
-
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

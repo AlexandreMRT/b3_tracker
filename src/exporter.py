@@ -1,22 +1,26 @@
 """
 Módulo para exportar dados para CSV e JSON
 """
-import os
-import json
+
 import csv
-from datetime import datetime, date
+import json
+import os
+from datetime import date, datetime
 from typing import Optional
+
 from sqlalchemy import func
 
 from database import SessionLocal
 from models import Asset, Quote
 from scoring import build_algorithmic_watchlist
 
+
 # Lazy import for polymarket to avoid circular imports
 def get_polymarket_sentiment():
     """Safely import and fetch polymarket sentiment"""
     try:
-        from polymarket import fetch_polymarket_sentiment, aggregate_sentiment
+        from polymarket import fetch_polymarket_sentiment
+
         asset_markets = fetch_polymarket_sentiment()
         return asset_markets
     except Exception as e:
@@ -27,9 +31,10 @@ def get_polymarket_sentiment():
 def _get_polymarket_for_report() -> dict:
     """Get Polymarket data formatted for AI report"""
     try:
-        from polymarket import fetch_polymarket_sentiment, aggregate_sentiment
+        from polymarket import aggregate_sentiment, fetch_polymarket_sentiment
+
         asset_markets = fetch_polymarket_sentiment()
-        
+
         result = {}
         for asset_key, markets in asset_markets.items():
             agg = aggregate_sentiment(markets)
@@ -46,7 +51,7 @@ def _get_polymarket_for_report() -> dict:
                         "volume_24h": m.get("volume_24h"),
                     }
                     for m in markets[:3]
-                ]
+                ],
             }
         return result
     except Exception as e:
@@ -63,22 +68,19 @@ def get_latest_quotes(db, quote_date: Optional[date] = None):
     """
     if quote_date:
         target_date = datetime.combine(quote_date, datetime.min.time())
-        quotes = db.query(Quote).join(Asset).filter(
-            Quote.quote_date == target_date
-        ).all()
+        quotes = db.query(Quote).join(Asset).filter(Quote.quote_date == target_date).all()
     else:
         # Subquery para pegar a última cotação de cada ativo
-        subquery = db.query(
-            Quote.asset_id,
-            func.max(Quote.quote_date).label('max_date')
-        ).group_by(Quote.asset_id).subquery()
-        
-        quotes = db.query(Quote).join(
-            subquery,
-            (Quote.asset_id == subquery.c.asset_id) & 
-            (Quote.quote_date == subquery.c.max_date)
-        ).all()
-    
+        subquery = (
+            db.query(Quote.asset_id, func.max(Quote.quote_date).label("max_date")).group_by(Quote.asset_id).subquery()
+        )
+
+        quotes = (
+            db.query(Quote)
+            .join(subquery, (Quote.asset_id == subquery.c.asset_id) & (Quote.quote_date == subquery.c.max_date))
+            .all()
+        )
+
     return quotes
 
 
@@ -178,54 +180,54 @@ def format_quote_row(quote: Quote) -> dict:
         "news_headline_en": quote.news_headline_en,
         "news_sentiment_label": quote.news_sentiment_label,
         "data_cotacao": quote.quote_date.strftime("%Y-%m-%d"),
-        "atualizado_em": quote.fetched_at.strftime("%Y-%m-%d %H:%M:%S")
+        "atualizado_em": quote.fetched_at.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
 def export_to_csv(quote_date: Optional[date] = None, filename: Optional[str] = None) -> str:
     """
     Exporta cotações para CSV
-    
+
     Args:
         quote_date: Data específica para exportar (None = mais recentes)
         filename: Nome do arquivo (None = gera automaticamente)
-    
+
     Returns:
         Caminho do arquivo gerado
     """
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db, quote_date)
-        
+
         if not quotes:
             print("⚠️ Nenhuma cotação encontrada para exportar")
             return None
-        
+
         # Gerar nome do arquivo
         if not filename:
             date_str = quote_date.strftime("%Y-%m-%d") if quote_date else datetime.now().strftime("%Y-%m-%d")
             filename = f"cotacoes_{date_str}.csv"
-        
+
         filepath = os.path.join(EXPORTS_PATH, filename)
-        
+
         # Criar diretório se não existir
         os.makedirs(EXPORTS_PATH, exist_ok=True)
-        
+
         # Escrever CSV
         rows = [format_quote_row(q) for q in quotes]
-        
+
         # Ordenar por setor e ticker
         rows.sort(key=lambda x: (x["setor"], x["ticker"]))
-        
-        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=rows[0].keys())
             writer.writeheader()
             writer.writerows(rows)
-        
+
         print(f"✅ CSV exportado: {filepath} ({len(rows)} registros)")
         return filepath
-        
+
     finally:
         db.close()
 
@@ -233,49 +235,49 @@ def export_to_csv(quote_date: Optional[date] = None, filename: Optional[str] = N
 def export_to_json(quote_date: Optional[date] = None, filename: Optional[str] = None) -> str:
     """
     Exporta cotações para JSON
-    
+
     Args:
         quote_date: Data específica para exportar (None = mais recentes)
         filename: Nome do arquivo (None = gera automaticamente)
-    
+
     Returns:
         Caminho do arquivo gerado
     """
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db, quote_date)
-        
+
         if not quotes:
             print("⚠️ Nenhuma cotação encontrada para exportar")
             return None
-        
+
         # Gerar nome do arquivo
         if not filename:
             date_str = quote_date.strftime("%Y-%m-%d") if quote_date else datetime.now().strftime("%Y-%m-%d")
             filename = f"cotacoes_{date_str}.json"
-        
+
         filepath = os.path.join(EXPORTS_PATH, filename)
-        
+
         # Criar diretório se não existir
         os.makedirs(EXPORTS_PATH, exist_ok=True)
-        
+
         # Preparar dados
         rows = [format_quote_row(q) for q in quotes]
         rows.sort(key=lambda x: (x["setor"], x["ticker"]))
-        
+
         data = {
             "data_exportacao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "total_ativos": len(rows),
-            "cotacoes": rows
+            "cotacoes": rows,
         }
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
+
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        
+
         print(f"✅ JSON exportado: {filepath} ({len(rows)} registros)")
         return filepath
-        
+
     finally:
         db.close()
 
@@ -283,16 +285,16 @@ def export_to_json(quote_date: Optional[date] = None, filename: Optional[str] = 
 def print_summary():
     """Imprime um resumo das cotações mais recentes com variações"""
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db)
-        
+
         if not quotes:
             print("⚠️ Nenhuma cotação encontrada")
             return
-        
+
         rows = [format_quote_row(q) for q in quotes]
-        
+
         # Formatar variações com cores ANSI e alinhamento correto
         def color_change(val):
             if val is None:
@@ -304,55 +306,63 @@ def print_summary():
                 return f"{color}{val:>+7.1f}%{reset}"
             else:
                 return f"{color}{val:>7.1f}%{reset}"
-        
+
         def print_section(title, section_rows):
             """Imprime uma seção de ativos"""
             if not section_rows:
                 return
-            
-            print(f"\n{'='*140}")
+
+            print(f"\n{'=' * 140}")
             print(f"  {title}")
-            print(f"{'='*140}")
-            print(f"{'TICKER':<10} {'NOME':<20} {'BRL':>12} {'USD':>10} {'1D':>8} {'1W':>8} {'1M':>8} {'YTD':>8} {'5Y':>8} {'ALL':>8}")
-            print("-"*140)
-            
+            print(f"{'=' * 140}")
+            print(
+                f"{'TICKER':<10} {'NOME':<20} {'BRL':>12} {'USD':>10} {'1D':>8} {'1W':>8} {'1M':>8} {'YTD':>8} {'5Y':>8} {'ALL':>8}"
+            )
+            print("-" * 140)
+
             current_sector = None
             for row in section_rows:
                 if row["setor"] != current_sector:
                     current_sector = row["setor"]
                     print(f"\n--- {current_sector.upper()} ---")
-                
-                usd_str = f"{row['preco_usd']:>10.2f}" if row['preco_usd'] else "       N/A"
-                
-                print(f"{row['ticker']:<10} {row['nome'][:19]:<20} {row['preco_brl']:>12,.2f} {usd_str} "
-                      f"{color_change(row['var_1d'])} {color_change(row['var_1w'])} "
-                      f"{color_change(row['var_1m'])} {color_change(row['var_ytd'])} "
-                      f"{color_change(row['var_5y'])} {color_change(row['var_all'])}")
-        
+
+                usd_str = f"{row['preco_usd']:>10.2f}" if row["preco_usd"] else "       N/A"
+
+                print(
+                    f"{row['ticker']:<10} {row['nome'][:19]:<20} {row['preco_brl']:>12,.2f} {usd_str} "
+                    f"{color_change(row['var_1d'])} {color_change(row['var_1w'])} "
+                    f"{color_change(row['var_1m'])} {color_change(row['var_ytd'])} "
+                    f"{color_change(row['var_5y'])} {color_change(row['var_all'])}"
+                )
+
         # Separar por tipo de ativo
         br_stocks = [r for r in rows if r["tipo"] == "stock"]
         us_stocks = [r for r in rows if r["tipo"] == "us_stock"]
         commodities = [r for r in rows if r["tipo"] == "commodity"]
         crypto = [r for r in rows if r["tipo"] == "crypto"]
         currency = [r for r in rows if r["tipo"] == "currency"]
-        
+
         # Ordenar cada seção por setor e ticker
         for section in [br_stocks, us_stocks, commodities, crypto, currency]:
             section.sort(key=lambda x: (x["setor"], x["ticker"]))
-        
+
         # Imprimir cada seção
         print_section("🇧🇷 AÇÕES BRASILEIRAS (B3)", br_stocks)
         print_section("🇺🇸 AÇÕES AMERICANAS (NYSE/NASDAQ)", us_stocks)
         print_section("🥇 COMMODITIES", commodities)
         print_section("₿ CRIPTOMOEDAS", crypto)
         print_section("💱 CÂMBIO", currency)
-        
-        print(f"\n{'='*140}")
-        print(f"Total de ativos: {len(rows)} | 🇧🇷 Brasil: {len(br_stocks)} | 🇺🇸 EUA: {len(us_stocks)} | "
-              f"Commodities: {len(commodities)} | Crypto: {len(crypto)}")
-        print("Legenda: 1D = Dia anterior | 1W = 1 semana | 1M = 1 mês | YTD = Ano até a data | 5Y = 5 anos | ALL = Desde o início")
-        print("="*140 + "\n")
-        
+
+        print(f"\n{'=' * 140}")
+        print(
+            f"Total de ativos: {len(rows)} | 🇧🇷 Brasil: {len(br_stocks)} | 🇺🇸 EUA: {len(us_stocks)} | "
+            f"Commodities: {len(commodities)} | Crypto: {len(crypto)}"
+        )
+        print(
+            "Legenda: 1D = Dia anterior | 1W = 1 semana | 1M = 1 mês | YTD = Ano até a data | 5Y = 5 anos | ALL = Desde o início"
+        )
+        print("=" * 140 + "\n")
+
     finally:
         db.close()
 
@@ -360,36 +370,41 @@ def print_summary():
 def print_ai_analysis():
     """Imprime análise detalhada com dados fundamentais para AI"""
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db)
-        
+
         if not quotes:
             print("⚠️ Nenhuma cotação encontrada")
             return
-        
+
         rows = [format_quote_row(q) for q in quotes]
-        
+
         def format_rating(rating):
             if not rating:
                 return "    N/A"
-            colors = {"buy": "\033[92m", "strong_buy": "\033[92m", 
-                      "hold": "\033[93m", "sell": "\033[91m", "strong_sell": "\033[91m"}
+            colors = {
+                "buy": "\033[92m",
+                "strong_buy": "\033[92m",
+                "hold": "\033[93m",
+                "sell": "\033[91m",
+                "strong_sell": "\033[91m",
+            }
             color = colors.get(rating, "")
             return f"{color}{rating:>7}\033[0m"
-        
+
         def format_rsi(val):
             if val is None:
                 return "   N/A"
             color = "\033[91m" if val > 70 else ("\033[92m" if val < 30 else "")
             return f"{color}{val:>5.0f}\033[0m"
-        
+
         def format_pct(val, invert=False):
             if val is None:
                 return "     N/A"
             color = "\033[92m" if (val >= 0) != invert else "\033[91m"
             return f"{color}{val:>+7.1f}%\033[0m"
-        
+
         def format_signal(summary):
             if not summary:
                 return "  N/A  "
@@ -398,46 +413,51 @@ def print_ai_analysis():
             color = colors.get(summary, "")
             icon = emoji.get(summary, "")
             return f"{color}{icon}{summary[:4]:>4}\033[0m"
-        
-        print(f"\n{'='*180}")
+
+        print(f"\n{'=' * 180}")
         print("  🤖 AI INVESTMENT ANALYSIS - FUNDAMENTAL & TECHNICAL DATA")
-        print(f"{'='*180}")
-        print(f"{'TICKER':<8} {'NOME':<16} {'P/E':>7} {'BETA':>5} {'RSI':>5} {'vs52H':>8} {'vsIBOV':>8} {'vsSP500':>8} {'SIGNAL':>8} {'MA50':>5} {'MA200':>5} {'RATING':>8} {'VOL30D':>7}")
-        print("-"*180)
-        
+        print(f"{'=' * 180}")
+        print(
+            f"{'TICKER':<8} {'NOME':<16} {'P/E':>7} {'BETA':>5} {'RSI':>5} {'vs52H':>8} {'vsIBOV':>8} {'vsSP500':>8} {'SIGNAL':>8} {'MA50':>5} {'MA200':>5} {'RATING':>8} {'VOL30D':>7}"
+        )
+        print("-" * 180)
+
         # Only show stocks (not commodities/crypto)
         stocks = [r for r in rows if r["tipo"] in ("stock", "us_stock")]
         stocks.sort(key=lambda x: (x["tipo"], x["setor"], x["ticker"]))
-        
+
         current_type = None
         for row in stocks:
             if row["tipo"] != current_type:
                 current_type = row["tipo"]
                 label = "🇧🇷 BRAZIL" if current_type == "stock" else "🇺🇸 USA"
-                print(f"\n{'='*40} {label} {'='*40}")
-            
-            pe = f"{row['pe_ratio']:>7.1f}" if row['pe_ratio'] else "    N/A"
-            beta = f"{row['beta']:>5.2f}" if row['beta'] else "  N/A"
-            ma50 = "  ✓" if row['above_ma_50'] == 1 else ("  ✗" if row['above_ma_50'] == 0 else " N/A")
-            ma200 = "  ✓" if row['above_ma_200'] == 1 else ("  ✗" if row['above_ma_200'] == 0 else " N/A")
-            vol30d = f"{row['volatility_30d']:>6.2f}%" if row['volatility_30d'] else "    N/A"
-            
+                print(f"\n{'=' * 40} {label} {'=' * 40}")
+
+            pe = f"{row['pe_ratio']:>7.1f}" if row["pe_ratio"] else "    N/A"
+            beta = f"{row['beta']:>5.2f}" if row["beta"] else "  N/A"
+            ma50 = "  ✓" if row["above_ma_50"] == 1 else ("  ✗" if row["above_ma_50"] == 0 else " N/A")
+            ma200 = "  ✓" if row["above_ma_200"] == 1 else ("  ✗" if row["above_ma_200"] == 0 else " N/A")
+            vol30d = f"{row['volatility_30d']:>6.2f}%" if row["volatility_30d"] else "    N/A"
+
             # Use vs_ibov_ytd for Brazil, vs_sp500_ytd for US
-            if row["tipo"] == "stock":
-                vs_bench = format_pct(row['vs_ibov_ytd'])
-            else:
-                vs_bench = format_pct(row['vs_sp500_ytd'])
-            
-            print(f"{row['ticker']:<8} {row['nome'][:15]:<16} {pe} {beta} "
-                  f"{format_rsi(row['rsi_14'])} {format_pct(row['pct_from_52w_high'], invert=True)} "
-                  f"{format_pct(row['vs_ibov_ytd'])} {format_pct(row['vs_sp500_ytd'])} "
-                  f"{format_signal(row['signal_summary'])} {ma50} {ma200} {format_rating(row['analyst_rating'])} {vol30d}")
-        
-        print(f"\n{'='*180}")
-        print("Legend: vsIBOV/vsSP500 = YTD outperformance vs benchmark | SIGNAL = AI-detected signal (bullish/bearish/neutral)")
-        print("        VOL30D = 30-day volatility | RSI = 14-day RSI (>70 overbought, <30 oversold) | vs52H = % from 52-week high")
-        print("="*180 + "\n")
-        
+            vs_bench = format_pct(row["vs_ibov_ytd"]) if row["tipo"] == "stock" else format_pct(row["vs_sp500_ytd"])
+
+            print(
+                f"{row['ticker']:<8} {row['nome'][:15]:<16} {pe} {beta} "
+                f"{format_rsi(row['rsi_14'])} {format_pct(row['pct_from_52w_high'], invert=True)} "
+                f"{vs_bench} "
+                f"{format_signal(row['signal_summary'])} {ma50} {ma200} {format_rating(row['analyst_rating'])} {vol30d}"
+            )
+
+        print(f"\n{'=' * 180}")
+        print(
+            "Legend: vsIBOV/vsSP500 = YTD outperformance vs benchmark | SIGNAL = AI-detected signal (bullish/bearish/neutral)"
+        )
+        print(
+            "        VOL30D = 30-day volatility | RSI = 14-day RSI (>70 overbought, <30 oversold) | vs52H = % from 52-week high"
+        )
+        print("=" * 180 + "\n")
+
     finally:
         db.close()
 
@@ -445,76 +465,76 @@ def print_ai_analysis():
 def print_signals():
     """Imprime sinais de trading detectados"""
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db)
-        
+
         if not quotes:
             print("⚠️ Nenhuma cotação encontrada")
             return
-        
+
         rows = [format_quote_row(q) for q in quotes]
         stocks = [r for r in rows if r["tipo"] in ("stock", "us_stock")]
-        
+
         # Filter by signals
-        bullish = [r for r in stocks if r.get('signal_summary') == 'bullish']
-        bearish = [r for r in stocks if r.get('signal_summary') == 'bearish']
-        oversold = [r for r in stocks if r.get('signal_rsi_oversold') == 1]
-        overbought = [r for r in stocks if r.get('signal_rsi_overbought') == 1]
-        at_52w_low = [r for r in stocks if r.get('signal_52w_low') == 1]
-        at_52w_high = [r for r in stocks if r.get('signal_52w_high') == 1]
-        volume_spike = [r for r in stocks if r.get('signal_volume_spike') == 1]
-        golden_cross = [r for r in stocks if r.get('signal_golden_cross') == 1]
-        
-        print(f"\n{'='*80}")
+        bullish = [r for r in stocks if r.get("signal_summary") == "bullish"]
+        bearish = [r for r in stocks if r.get("signal_summary") == "bearish"]
+        oversold = [r for r in stocks if r.get("signal_rsi_oversold") == 1]
+        overbought = [r for r in stocks if r.get("signal_rsi_overbought") == 1]
+        at_52w_low = [r for r in stocks if r.get("signal_52w_low") == 1]
+        at_52w_high = [r for r in stocks if r.get("signal_52w_high") == 1]
+        volume_spike = [r for r in stocks if r.get("signal_volume_spike") == 1]
+        golden_cross = [r for r in stocks if r.get("signal_golden_cross") == 1]
+
+        print(f"\n{'=' * 80}")
         print("  🚦 TRADING SIGNALS DETECTED")
-        print(f"{'='*80}")
-        
+        print(f"{'=' * 80}")
+
         if bullish:
             print(f"\n📈 BULLISH SIGNALS ({len(bullish)} stocks):")
             for r in bullish[:10]:
-                ytd = r.get('var_ytd') or 0
+                ytd = r.get("var_ytd") or 0
                 print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {ytd:>+6.1f}%")
-        
+
         if bearish:
             print(f"\n📉 BEARISH SIGNALS ({len(bearish)} stocks):")
             for r in bearish[:10]:
-                ytd = r.get('var_ytd') or 0
+                ytd = r.get("var_ytd") or 0
                 print(f"   {r['ticker']:<8} {r['nome'][:20]:<20} RSI: {r.get('rsi_14', 'N/A'):>5} | YTD: {ytd:>+6.1f}%")
-        
+
         if oversold:
             print(f"\n🟢 RSI OVERSOLD (<30) - Potential buy ({len(oversold)} stocks):")
             for r in oversold:
                 print(f"   {r['ticker']:<8} RSI: {r.get('rsi_14', 0):>5.0f}")
-        
+
         if overbought:
             print(f"\n🔴 RSI OVERBOUGHT (>70) - Potential sell ({len(overbought)} stocks):")
             for r in overbought:
                 print(f"   {r['ticker']:<8} RSI: {r.get('rsi_14', 0):>5.0f}")
-        
+
         if at_52w_low:
             print(f"\n⬇️ NEAR 52-WEEK LOW (within 5%) ({len(at_52w_low)} stocks):")
             for r in at_52w_low:
                 print(f"   {r['ticker']:<8} {r['nome'][:20]:<20}")
-        
+
         if at_52w_high:
             print(f"\n⬆️ NEAR 52-WEEK HIGH (within 5%) ({len(at_52w_high)} stocks):")
             for r in at_52w_high:
                 print(f"   {r['ticker']:<8} {r['nome'][:20]:<20}")
-        
+
         if volume_spike:
             print(f"\n📊 VOLUME SPIKE (>2x average) ({len(volume_spike)} stocks):")
             for r in volume_spike:
-                ratio = r.get('volume_ratio', 0)
+                ratio = r.get("volume_ratio", 0)
                 print(f"   {r['ticker']:<8} Volume: {ratio:>4.1f}x average")
-        
+
         if golden_cross:
             print(f"\n✨ GOLDEN CROSS (MA50 > MA200) ({len(golden_cross)} stocks):")
             for r in golden_cross[:10]:
                 print(f"   {r['ticker']:<8} {r['nome'][:20]:<20}")
-        
-        print(f"\n{'='*80}\n")
-        
+
+        print(f"\n{'=' * 80}\n")
+
     finally:
         db.close()
 
@@ -522,105 +542,111 @@ def print_signals():
 def print_news_sentiment():
     """Imprime análise de sentimento de notícias"""
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db)
-        
+
         if not quotes:
             print("⚠️ Nenhuma cotação encontrada")
             return
-        
+
         rows = [format_quote_row(q) for q in quotes]
         stocks = [r for r in rows if r["tipo"] in ("stock", "us_stock")]
-        
+
         # Filter by sentiment
-        positive = [r for r in stocks if r.get('news_sentiment_label') == 'positive']
-        negative = [r for r in stocks if r.get('news_sentiment_label') == 'negative']
-        neutral = [r for r in stocks if r.get('news_sentiment_label') == 'neutral']
-        
+        positive = [r for r in stocks if r.get("news_sentiment_label") == "positive"]
+        negative = [r for r in stocks if r.get("news_sentiment_label") == "negative"]
+        neutral = [r for r in stocks if r.get("news_sentiment_label") == "neutral"]
+
         # Sort by combined sentiment score
-        positive.sort(key=lambda x: x.get('news_sentiment_combined', 0) or 0, reverse=True)
-        negative.sort(key=lambda x: x.get('news_sentiment_combined', 0) or 0)
-        
+        positive.sort(key=lambda x: x.get("news_sentiment_combined", 0) or 0, reverse=True)
+        negative.sort(key=lambda x: x.get("news_sentiment_combined", 0) or 0)
+
         # Separate Brazilian and US stocks
         br_positive = [r for r in positive if r["tipo"] == "stock"]
         us_positive = [r for r in positive if r["tipo"] == "us_stock"]
         br_negative = [r for r in negative if r["tipo"] == "stock"]
         us_negative = [r for r in negative if r["tipo"] == "us_stock"]
-        
+
         def format_score(score):
             if score is None:
                 return "  N/A"
             color = "\033[92m" if score >= 0.2 else ("\033[91m" if score <= -0.2 else "\033[93m")
             return f"{color}{score:>+.2f}\033[0m"
-        
+
         def truncate(text, max_len=50):
             if not text:
                 return ""
             return text[:max_len] + "..." if len(text) > max_len else text
-        
-        print(f"\n{'='*120}")
+
+        print(f"\n{'=' * 120}")
         print("  📰 NEWS SENTIMENT ANALYSIS")
-        print(f"{'='*120}")
-        
+        print(f"{'=' * 120}")
+
         # Brazilian stocks with positive sentiment
         if br_positive:
             print(f"\n🇧🇷 BRAZIL - 🟢 POSITIVE SENTIMENT ({len(br_positive)} stocks):")
             for r in br_positive[:8]:
-                pt_score = format_score(r.get('news_sentiment_pt'))
-                en_score = format_score(r.get('news_sentiment_en'))
-                combined = format_score(r.get('news_sentiment_combined'))
-                pt_count = r.get('news_count_pt', 0) or 0
-                en_count = r.get('news_count_en', 0) or 0
-                headline = truncate(r.get('news_headline_pt') or r.get('news_headline_en', ''))
-                print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} PT: {pt_score} ({pt_count}) | EN: {en_score} ({en_count}) | Combined: {combined}")
+                pt_score = format_score(r.get("news_sentiment_pt"))
+                en_score = format_score(r.get("news_sentiment_en"))
+                combined = format_score(r.get("news_sentiment_combined"))
+                pt_count = r.get("news_count_pt", 0) or 0
+                en_count = r.get("news_count_en", 0) or 0
+                headline = truncate(r.get("news_headline_pt") or r.get("news_headline_en", ""))
+                print(
+                    f"   {r['ticker']:<8} {r['nome'][:16]:<16} PT: {pt_score} ({pt_count}) | EN: {en_score} ({en_count}) | Combined: {combined}"
+                )
                 if headline:
-                    print(f"            \033[90m\"{headline}\"\033[0m")
-        
+                    print(f'            \033[90m"{headline}"\033[0m')
+
         # Brazilian stocks with negative sentiment
         if br_negative:
             print(f"\n🇧🇷 BRAZIL - 🔴 NEGATIVE SENTIMENT ({len(br_negative)} stocks):")
             for r in br_negative[:8]:
-                pt_score = format_score(r.get('news_sentiment_pt'))
-                en_score = format_score(r.get('news_sentiment_en'))
-                combined = format_score(r.get('news_sentiment_combined'))
-                pt_count = r.get('news_count_pt', 0) or 0
-                en_count = r.get('news_count_en', 0) or 0
-                headline = truncate(r.get('news_headline_pt') or r.get('news_headline_en', ''))
-                print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} PT: {pt_score} ({pt_count}) | EN: {en_score} ({en_count}) | Combined: {combined}")
+                pt_score = format_score(r.get("news_sentiment_pt"))
+                en_score = format_score(r.get("news_sentiment_en"))
+                combined = format_score(r.get("news_sentiment_combined"))
+                pt_count = r.get("news_count_pt", 0) or 0
+                en_count = r.get("news_count_en", 0) or 0
+                headline = truncate(r.get("news_headline_pt") or r.get("news_headline_en", ""))
+                print(
+                    f"   {r['ticker']:<8} {r['nome'][:16]:<16} PT: {pt_score} ({pt_count}) | EN: {en_score} ({en_count}) | Combined: {combined}"
+                )
                 if headline:
-                    print(f"            \033[90m\"{headline}\"\033[0m")
-        
+                    print(f'            \033[90m"{headline}"\033[0m')
+
         # US stocks with positive sentiment
         if us_positive:
             print(f"\n🇺🇸 USA - 🟢 POSITIVE SENTIMENT ({len(us_positive)} stocks):")
             for r in us_positive[:8]:
-                en_score = format_score(r.get('news_sentiment_en'))
-                en_count = r.get('news_count_en', 0) or 0
-                headline = truncate(r.get('news_headline_en', ''))
+                en_score = format_score(r.get("news_sentiment_en"))
+                en_count = r.get("news_count_en", 0) or 0
+                headline = truncate(r.get("news_headline_en", ""))
                 print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} EN: {en_score} ({en_count} articles)")
                 if headline:
-                    print(f"            \033[90m\"{headline}\"\033[0m")
-        
+                    print(f'            \033[90m"{headline}"\033[0m')
+
         # US stocks with negative sentiment
         if us_negative:
             print(f"\n🇺🇸 USA - 🔴 NEGATIVE SENTIMENT ({len(us_negative)} stocks):")
             for r in us_negative[:8]:
-                en_score = format_score(r.get('news_sentiment_en'))
-                en_count = r.get('news_count_en', 0) or 0
-                headline = truncate(r.get('news_headline_en', ''))
+                en_score = format_score(r.get("news_sentiment_en"))
+                en_count = r.get("news_count_en", 0) or 0
+                headline = truncate(r.get("news_headline_en", ""))
                 print(f"   {r['ticker']:<8} {r['nome'][:16]:<16} EN: {en_score} ({en_count} articles)")
                 if headline:
-                    print(f"            \033[90m\"{headline}\"\033[0m")
-        
+                    print(f'            \033[90m"{headline}"\033[0m')
+
         # Summary
-        total_with_news = len([r for r in stocks if r.get('news_count_pt', 0) or r.get('news_count_en', 0)])
-        print(f"\n{'='*120}")
-        print(f"Summary: {len(positive)} positive | {len(negative)} negative | {len(neutral)} neutral | {total_with_news} stocks with news")
+        total_with_news = len([r for r in stocks if r.get("news_count_pt", 0) or r.get("news_count_en", 0)])
+        print(f"\n{'=' * 120}")
+        print(
+            f"Summary: {len(positive)} positive | {len(negative)} negative | {len(neutral)} neutral | {total_with_news} stocks with news"
+        )
         print("Score range: -1.0 (very negative) to +1.0 (very positive) | Threshold: ±0.2 for classification")
         print("Brazilian stocks: 60% PT weight + 40% EN weight for combined score")
-        print(f"{'='*120}\n")
-        
+        print(f"{'=' * 120}\n")
+
     finally:
         db.close()
 
@@ -630,29 +656,29 @@ def export_ai_json(filename: Optional[str] = None) -> str:
     Exporta dados em formato otimizado para análise de AI
     """
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db)
-        
+
         if not quotes:
             print("⚠️ Nenhuma cotação encontrada para exportar")
             return None
-        
+
         if not filename:
             filename = f"ai_analysis_{datetime.now().strftime('%Y-%m-%d')}.json"
-        
+
         filepath = os.path.join(EXPORTS_PATH, filename)
         os.makedirs(EXPORTS_PATH, exist_ok=True)
-        
+
         rows = [format_quote_row(q) for q in quotes]
-        
+
         # Structure for AI consumption
         data = {
             "metadata": {
                 "generated_at": datetime.now().isoformat(),
                 "total_assets": len(rows),
                 "data_version": "2.0",
-                "description": "B3 and US stock data with fundamentals for AI analysis"
+                "description": "B3 and US stock data with fundamentals for AI analysis",
             },
             "market_summary": {
                 "brazil_stocks": len([r for r in rows if r["tipo"] == "stock"]),
@@ -660,15 +686,15 @@ def export_ai_json(filename: Optional[str] = None) -> str:
                 "commodities": len([r for r in rows if r["tipo"] == "commodity"]),
                 "crypto": len([r for r in rows if r["tipo"] == "crypto"]),
             },
-            "assets": rows
+            "assets": rows,
         }
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
+
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        
+
         print(f"✅ AI JSON exportado: {filepath}")
         return filepath
-        
+
     finally:
         db.close()
 
@@ -679,48 +705,48 @@ def generate_report_data() -> dict:
     Retorna um dicionário com todos os dados processados.
     """
     db = SessionLocal()
-    
+
     try:
         quotes = get_latest_quotes(db)
-        
+
         if not quotes:
             return None
-        
+
         rows = [format_quote_row(q) for q in quotes]
-        
+
         # Separate by type
         br_stocks = [r for r in rows if r["tipo"] == "stock"]
         us_stocks = [r for r in rows if r["tipo"] == "us_stock"]
         commodities = [r for r in rows if r["tipo"] == "commodity"]
         crypto = [r for r in rows if r["tipo"] == "crypto"]
         all_stocks = br_stocks + us_stocks
-        
+
         # Top movers (1D)
         stocks_with_1d = [r for r in all_stocks if r.get("var_1d") is not None]
         top_gainers = sorted(stocks_with_1d, key=lambda x: x.get("var_1d", 0), reverse=True)[:10]
         top_losers = sorted(stocks_with_1d, key=lambda x: x.get("var_1d", 0))[:10]
-        
+
         # Signals
-        bullish = [r for r in all_stocks if r.get('signal_summary') == 'bullish']
-        bearish = [r for r in all_stocks if r.get('signal_summary') == 'bearish']
-        oversold = [r for r in all_stocks if r.get('signal_rsi_oversold') == 1]
-        overbought = [r for r in all_stocks if r.get('signal_rsi_overbought') == 1]
-        near_52w_high = [r for r in all_stocks if r.get('signal_52w_high') == 1]
-        near_52w_low = [r for r in all_stocks if r.get('signal_52w_low') == 1]
-        volume_spike = [r for r in all_stocks if r.get('signal_volume_spike') == 1]
-        golden_cross = [r for r in all_stocks if r.get('signal_golden_cross') == 1]
-        
+        bullish = [r for r in all_stocks if r.get("signal_summary") == "bullish"]
+        bearish = [r for r in all_stocks if r.get("signal_summary") == "bearish"]
+        oversold = [r for r in all_stocks if r.get("signal_rsi_oversold") == 1]
+        overbought = [r for r in all_stocks if r.get("signal_rsi_overbought") == 1]
+        near_52w_high = [r for r in all_stocks if r.get("signal_52w_high") == 1]
+        near_52w_low = [r for r in all_stocks if r.get("signal_52w_low") == 1]
+        volume_spike = [r for r in all_stocks if r.get("signal_volume_spike") == 1]
+        golden_cross = [r for r in all_stocks if r.get("signal_golden_cross") == 1]
+
         # News sentiment
         positive_news = sorted(
-            [r for r in all_stocks if r.get('news_sentiment_label') == 'positive'],
-            key=lambda x: x.get('news_sentiment_combined', 0) or 0,
-            reverse=True
+            [r for r in all_stocks if r.get("news_sentiment_label") == "positive"],
+            key=lambda x: x.get("news_sentiment_combined", 0) or 0,
+            reverse=True,
         )
         negative_news = sorted(
-            [r for r in all_stocks if r.get('news_sentiment_label') == 'negative'],
-            key=lambda x: x.get('news_sentiment_combined', 0) or 0
+            [r for r in all_stocks if r.get("news_sentiment_label") == "negative"],
+            key=lambda x: x.get("news_sentiment_combined", 0) or 0,
         )
-        
+
         # Benchmark data (from first stock that has it)
         ibov_ytd = None
         sp500_ytd = None
@@ -731,14 +757,14 @@ def generate_report_data() -> dict:
                 sp500_ytd = r["sp500_change_ytd"]
             if ibov_ytd and sp500_ytd:
                 break
-        
+
         # USD/BRL (from currency or calculate from stocks)
         usd_brl = None
         for r in rows:
             if r["tipo"] == "currency":
                 usd_brl = r["preco_brl"]
                 break
-        
+
         algorithmic = build_algorithmic_watchlist(all_stocks)
 
         return {
@@ -776,7 +802,7 @@ def generate_report_data() -> dict:
             "algorithmic": algorithmic,
             "all_data": rows,
         }
-        
+
     finally:
         db.close()
 
@@ -786,23 +812,23 @@ def export_human_report(filename: Optional[str] = None) -> str:
     Exporta relatório em Markdown para leitura humana.
     """
     data = generate_report_data()
-    
+
     if not data:
         print("⚠️ Nenhum dado para gerar relatório")
         return None
-    
+
     if not filename:
         filename = f"report_{datetime.now().strftime('%Y-%m-%d')}.md"
-    
+
     filepath = os.path.join(EXPORTS_PATH, filename)
     os.makedirs(EXPORTS_PATH, exist_ok=True)
-    
+
     lines = []
-    
+
     # Header
     lines.append(f"# 📈 B3 Tracker Report - {data['generated_at'].strftime('%Y-%m-%d %H:%M')}")
     lines.append("")
-    
+
     # Market Summary
     lines.append("## 📊 Market Summary")
     lines.append("")
@@ -812,82 +838,82 @@ def export_human_report(filename: Optional[str] = None) -> str:
     lines.append(f"  - 🥇 Commodities: {data['counts']['commodities']}")
     lines.append(f"  - ₿ Crypto: {data['counts']['crypto']}")
     lines.append("")
-    
-    ctx = data['market_context']
-    if ctx['ibov_ytd'] or ctx['sp500_ytd']:
+
+    ctx = data["market_context"]
+    if ctx["ibov_ytd"] or ctx["sp500_ytd"]:
         lines.append("### Benchmarks YTD")
-        if ctx['ibov_ytd']:
+        if ctx["ibov_ytd"]:
             lines.append(f"- **IBOV**: {ctx['ibov_ytd']:+.1f}%")
-        if ctx['sp500_ytd']:
+        if ctx["sp500_ytd"]:
             lines.append(f"- **S&P 500**: {ctx['sp500_ytd']:+.1f}%")
-        if ctx['usd_brl']:
+        if ctx["usd_brl"]:
             lines.append(f"- **USD/BRL**: R$ {ctx['usd_brl']:.2f}")
         lines.append("")
-    
+
     # Top Movers
     lines.append("## 🔥 Top Movers (1D)")
     lines.append("")
-    
+
     lines.append("### 📈 Maiores Altas")
     lines.append("| Ticker | Nome | Variação 1D |")
     lines.append("|--------|------|-------------|")
-    for r in data['top_movers']['gainers'][:5]:
+    for r in data["top_movers"]["gainers"][:5]:
         lines.append(f"| {r['ticker']} | {r['nome'][:20]} | {r['var_1d']:+.2f}% |")
     lines.append("")
-    
+
     lines.append("### 📉 Maiores Quedas")
     lines.append("| Ticker | Nome | Variação 1D |")
     lines.append("|--------|------|-------------|")
-    for r in data['top_movers']['losers'][:5]:
+    for r in data["top_movers"]["losers"][:5]:
         lines.append(f"| {r['ticker']} | {r['nome'][:20]} | {r['var_1d']:+.2f}% |")
     lines.append("")
-    
+
     # Trading Signals
     lines.append("## 🚦 Trading Signals")
     lines.append("")
-    
-    signals = data['signals']
-    
-    if signals['bullish']:
+
+    signals = data["signals"]
+
+    if signals["bullish"]:
         lines.append(f"### 📈 Bullish ({len(signals['bullish'])} stocks)")
-        tickers = ", ".join([r['ticker'] for r in signals['bullish'][:15]])
+        tickers = ", ".join([r["ticker"] for r in signals["bullish"][:15]])
         lines.append(f"{tickers}")
         lines.append("")
-    
-    if signals['bearish']:
+
+    if signals["bearish"]:
         lines.append(f"### 📉 Bearish ({len(signals['bearish'])} stocks)")
-        tickers = ", ".join([r['ticker'] for r in signals['bearish'][:15]])
+        tickers = ", ".join([r["ticker"] for r in signals["bearish"][:15]])
         lines.append(f"{tickers}")
         lines.append("")
-    
-    if signals['oversold']:
-        lines.append(f"### 🟢 RSI Oversold (<30) - Potencial compra")
-        for r in signals['oversold'][:5]:
+
+    if signals["oversold"]:
+        lines.append("### 🟢 RSI Oversold (<30) - Potencial compra")
+        for r in signals["oversold"][:5]:
             lines.append(f"- **{r['ticker']}** ({r['nome'][:20]}) - RSI: {r['rsi_14']:.0f}")
         lines.append("")
-    
-    if signals['overbought']:
-        lines.append(f"### 🔴 RSI Overbought (>70) - Potencial venda")
-        for r in signals['overbought'][:5]:
+
+    if signals["overbought"]:
+        lines.append("### 🔴 RSI Overbought (>70) - Potencial venda")
+        for r in signals["overbought"][:5]:
             lines.append(f"- **{r['ticker']}** ({r['nome'][:20]}) - RSI: {r['rsi_14']:.0f}")
         lines.append("")
-    
-    if signals['near_52w_high']:
+
+    if signals["near_52w_high"]:
         lines.append(f"### ⬆️ Próximo da Máxima 52 semanas ({len(signals['near_52w_high'])} stocks)")
-        tickers = ", ".join([r['ticker'] for r in signals['near_52w_high'][:10]])
+        tickers = ", ".join([r["ticker"] for r in signals["near_52w_high"][:10]])
         lines.append(f"{tickers}")
         lines.append("")
-    
-    if signals['near_52w_low']:
+
+    if signals["near_52w_low"]:
         lines.append(f"### ⬇️ Próximo da Mínima 52 semanas ({len(signals['near_52w_low'])} stocks)")
-        tickers = ", ".join([r['ticker'] for r in signals['near_52w_low'][:10]])
+        tickers = ", ".join([r["ticker"] for r in signals["near_52w_low"][:10]])
         lines.append(f"{tickers}")
         lines.append("")
 
     # Algorithmic Watchlist (experimental)
-    algo = data.get('algorithmic', {})
-    watchlist = algo.get('watchlist', [])
-    avoid_list = algo.get('avoid_list', [])
+    algo = data.get("algorithmic", {})
+    watchlist = algo.get("watchlist", [])
+    avoid_list = algo.get("avoid_list", [])
 
     def format_reason(reason):
         labels = {
@@ -931,59 +957,60 @@ def export_human_report(filename: Optional[str] = None) -> str:
             if flags:
                 lines.append(f"  - alertas: {flags}")
         lines.append("")
-    
+
     # News Sentiment
     lines.append("## 📰 News Sentiment")
     lines.append("")
-    
-    news = data['news_sentiment']
-    
-    if news['positive']:
+
+    news = data["news_sentiment"]
+
+    if news["positive"]:
         lines.append(f"### 🟢 Sentimento Positivo ({len(news['positive'])} stocks)")
-        for r in news['positive'][:5]:
-            score = r.get('news_sentiment_combined', 0) or 0
-            headline = r.get('news_headline_pt') or r.get('news_headline_en', '')
+        for r in news["positive"][:5]:
+            score = r.get("news_sentiment_combined", 0) or 0
+            headline = r.get("news_headline_pt") or r.get("news_headline_en", "")
             headline = headline[:60] + "..." if len(headline) > 60 else headline
             lines.append(f"- **{r['ticker']}** (score: {score:+.2f})")
             if headline:
-                lines.append(f"  - *\"{headline}\"*")
+                lines.append(f'  - *"{headline}"*')
         lines.append("")
-    
-    if news['negative']:
+
+    if news["negative"]:
         lines.append(f"### 🔴 Sentimento Negativo ({len(news['negative'])} stocks)")
-        for r in news['negative'][:5]:
-            score = r.get('news_sentiment_combined', 0) or 0
-            headline = r.get('news_headline_pt') or r.get('news_headline_en', '')
+        for r in news["negative"][:5]:
+            score = r.get("news_sentiment_combined", 0) or 0
+            headline = r.get("news_headline_pt") or r.get("news_headline_en", "")
             headline = headline[:60] + "..." if len(headline) > 60 else headline
             lines.append(f"- **{r['ticker']}** (score: {score:+.2f})")
             if headline:
-                lines.append(f"  - *\"{headline}\"*")
+                lines.append(f'  - *"{headline}"*')
         lines.append("")
-    
+
     # Polymarket Prediction Markets
     lines.append("## 🎯 Polymarket Prediction Markets")
     lines.append("")
-    
+
     try:
-        from polymarket import fetch_polymarket_sentiment, aggregate_sentiment
+        from polymarket import aggregate_sentiment, fetch_polymarket_sentiment
+
         asset_markets = fetch_polymarket_sentiment()
-        
+
         if asset_markets:
             for asset_key, markets in sorted(asset_markets.items()):
                 if not markets:
                     continue
                 agg = aggregate_sentiment(markets)
-                label = agg.get('label', 'N/A')
-                score = agg.get('score')
+                label = agg.get("label", "N/A")
+                score = agg.get("score")
                 score_str = f"{score:+.2f}" if score else "N/A"
-                
+
                 label_emoji = {"bullish": "🟢", "bearish": "🔴", "neutral": "⚪"}.get(label, "❓")
                 lines.append(f"### {label_emoji} {asset_key} ({label.upper()} {score_str})")
-                
+
                 for m in markets[:2]:
-                    prob = m.get('yes_probability')
-                    prob_str = f"{prob*100:.0f}%" if prob else "N/A"
-                    vol = m.get('volume_24h') or 0
+                    prob = m.get("yes_probability")
+                    prob_str = f"{prob * 100:.0f}%" if prob else "N/A"
+                    vol = m.get("volume_24h") or 0
                     lines.append(f"- **[{prob_str}]** {m.get('question', 'N/A')[:60]}...")
                     lines.append(f"  - Volume: ${vol:,.0f}")
                 lines.append("")
@@ -993,15 +1020,15 @@ def export_human_report(filename: Optional[str] = None) -> str:
     except Exception as e:
         lines.append(f"*Polymarket indisponível: {e}*")
         lines.append("")
-    
+
     # Footer
     lines.append("---")
     lines.append(f"*Gerado em {data['generated_at'].strftime('%Y-%m-%d %H:%M:%S')} por B3 Tracker*")
-    
+
     # Write file
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    
+
     print(f"✅ Relatório Human exportado: {filepath}")
     return filepath
 
@@ -1011,102 +1038,96 @@ def export_ai_report(filename: Optional[str] = None) -> str:
     Exporta relatório JSON estruturado para consumo por AI/LLM.
     """
     data = generate_report_data()
-    
+
     if not data:
         print("⚠️ Nenhum dado para gerar relatório")
         return None
-    
+
     if not filename:
         filename = f"ai_report_{datetime.now().strftime('%Y-%m-%d')}.json"
-    
+
     filepath = os.path.join(EXPORTS_PATH, filename)
     os.makedirs(EXPORTS_PATH, exist_ok=True)
-    
+
     # Build AI-optimized structure
     def extract_ticker_info(items, fields=None):
         """Extract minimal info for AI consumption"""
         if fields is None:
-            fields = ['ticker', 'nome', 'var_1d', 'var_ytd', 'rsi_14', 'signal_summary']
+            fields = ["ticker", "nome", "var_1d", "var_ytd", "rsi_14", "signal_summary"]
         return [{k: r.get(k) for k in fields if k in r} for r in items]
-    
+
     report = {
         "metadata": {
             "report_type": "daily_market_summary",
-            "generated_at": data['generated_at'].isoformat(),
-            "total_assets": data['total_assets'],
+            "generated_at": data["generated_at"].isoformat(),
+            "total_assets": data["total_assets"],
             "version": "1.0",
         },
         "market_context": {
-            "ibov_ytd_pct": data['market_context']['ibov_ytd'],
-            "sp500_ytd_pct": data['market_context']['sp500_ytd'],
-            "usd_brl": data['market_context']['usd_brl'],
-            "asset_counts": data['counts'],
+            "ibov_ytd_pct": data["market_context"]["ibov_ytd"],
+            "sp500_ytd_pct": data["market_context"]["sp500_ytd"],
+            "usd_brl": data["market_context"]["usd_brl"],
+            "asset_counts": data["counts"],
         },
         "signals_summary": {
-            "bullish_count": len(data['signals']['bullish']),
-            "bearish_count": len(data['signals']['bearish']),
-            "bullish_tickers": [r['ticker'] for r in data['signals']['bullish']],
-            "bearish_tickers": [r['ticker'] for r in data['signals']['bearish']],
-            "rsi_oversold": [{"ticker": r['ticker'], "rsi": r['rsi_14']} for r in data['signals']['oversold']],
-            "rsi_overbought": [{"ticker": r['ticker'], "rsi": r['rsi_14']} for r in data['signals']['overbought']],
-            "near_52w_high": [r['ticker'] for r in data['signals']['near_52w_high']],
-            "near_52w_low": [r['ticker'] for r in data['signals']['near_52w_low']],
-            "volume_spike": [r['ticker'] for r in data['signals']['volume_spike']],
-            "golden_cross_count": len(data['signals']['golden_cross']),
+            "bullish_count": len(data["signals"]["bullish"]),
+            "bearish_count": len(data["signals"]["bearish"]),
+            "bullish_tickers": [r["ticker"] for r in data["signals"]["bullish"]],
+            "bearish_tickers": [r["ticker"] for r in data["signals"]["bearish"]],
+            "rsi_oversold": [{"ticker": r["ticker"], "rsi": r["rsi_14"]} for r in data["signals"]["oversold"]],
+            "rsi_overbought": [{"ticker": r["ticker"], "rsi": r["rsi_14"]} for r in data["signals"]["overbought"]],
+            "near_52w_high": [r["ticker"] for r in data["signals"]["near_52w_high"]],
+            "near_52w_low": [r["ticker"] for r in data["signals"]["near_52w_low"]],
+            "volume_spike": [r["ticker"] for r in data["signals"]["volume_spike"]],
+            "golden_cross_count": len(data["signals"]["golden_cross"]),
         },
         "top_movers": {
             "gainers_1d": [
-                {"ticker": r['ticker'], "name": r['nome'], "change_1d": r['var_1d']}
-                for r in data['top_movers']['gainers'][:10]
+                {"ticker": r["ticker"], "name": r["nome"], "change_1d": r["var_1d"]}
+                for r in data["top_movers"]["gainers"][:10]
             ],
             "losers_1d": [
-                {"ticker": r['ticker'], "name": r['nome'], "change_1d": r['var_1d']}
-                for r in data['top_movers']['losers'][:10]
+                {"ticker": r["ticker"], "name": r["nome"], "change_1d": r["var_1d"]}
+                for r in data["top_movers"]["losers"][:10]
             ],
         },
         "news_sentiment": {
-            "positive_count": len(data['news_sentiment']['positive']),
-            "negative_count": len(data['news_sentiment']['negative']),
+            "positive_count": len(data["news_sentiment"]["positive"]),
+            "negative_count": len(data["news_sentiment"]["negative"]),
             "positive": [
                 {
-                    "ticker": r['ticker'],
-                    "score": r.get('news_sentiment_combined'),
-                    "headline": (r.get('news_headline_pt') or r.get('news_headline_en', ''))[:100]
+                    "ticker": r["ticker"],
+                    "score": r.get("news_sentiment_combined"),
+                    "headline": (r.get("news_headline_pt") or r.get("news_headline_en", ""))[:100],
                 }
-                for r in data['news_sentiment']['positive'][:10]
+                for r in data["news_sentiment"]["positive"][:10]
             ],
             "negative": [
                 {
-                    "ticker": r['ticker'],
-                    "score": r.get('news_sentiment_combined'),
-                    "headline": (r.get('news_headline_pt') or r.get('news_headline_en', ''))[:100]
+                    "ticker": r["ticker"],
+                    "score": r.get("news_sentiment_combined"),
+                    "headline": (r.get("news_headline_pt") or r.get("news_headline_en", ""))[:100],
                 }
-                for r in data['news_sentiment']['negative'][:10]
+                for r in data["news_sentiment"]["negative"][:10]
             ],
         },
         "actionable_insights": {
-            "potential_buys": [
-                r['ticker'] for r in data['signals']['oversold']
-            ] + [
-                r['ticker'] for r in data['signals']['near_52w_low']
-            ],
-            "potential_sells": [
-                r['ticker'] for r in data['signals']['overbought']
-            ],
+            "potential_buys": [r["ticker"] for r in data["signals"]["oversold"]]
+            + [r["ticker"] for r in data["signals"]["near_52w_low"]],
+            "potential_sells": [r["ticker"] for r in data["signals"]["overbought"]],
             "momentum_stocks": [
-                r['ticker'] for r in data['signals']['bullish'] 
-                if r.get('var_ytd', 0) and r['var_ytd'] > 20
+                r["ticker"] for r in data["signals"]["bullish"] if r.get("var_ytd", 0) and r["var_ytd"] > 20
             ][:10],
             "algorithmic_watchlist": data.get("algorithmic", {}).get("watchlist", []),
             "algorithmic_avoid_list": data.get("algorithmic", {}).get("avoid_list", []),
         },
         "polymarket_sentiment": _get_polymarket_for_report(),
-        "full_data": data['all_data'],
+        "full_data": data["all_data"],
     }
-    
-    with open(filepath, 'w', encoding='utf-8') as f:
+
+    with open(filepath, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2, default=str)
-    
+
     print(f"✅ Relatório AI exportado: {filepath}")
     return filepath
 
@@ -1123,8 +1144,9 @@ def generate_reports() -> tuple:
 
 if __name__ == "__main__":
     from database import init_db
+
     init_db()
-    
+
     print("\n📊 Exportando cotações...\n")
     export_to_csv()
     export_to_json()
