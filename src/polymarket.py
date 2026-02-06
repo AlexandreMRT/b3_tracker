@@ -8,6 +8,9 @@ import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 # Polymarket Gamma API (public, no auth required)
 GAMMA_API = "https://gamma-api.polymarket.com"
@@ -87,7 +90,7 @@ def fetch_markets(
         return response.json()
         
     except requests.RequestException as e:
-        print(f"⚠️ Error fetching Polymarket data: {e}")
+        logger.warning(f"⚠️ Error fetching Polymarket data: {e}")
         return []
 
 
@@ -196,7 +199,7 @@ def fetch_polymarket_sentiment(max_markets: int = 200) -> Dict[str, List[Dict]]:
     Returns:
         Dict mapping asset keys to list of relevant markets with sentiment
     """
-    print("📊 Fetching Polymarket prediction markets...")
+    logger.info("📊 Fetching Polymarket prediction markets...")
     
     all_markets = []
     
@@ -213,7 +216,7 @@ def fetch_polymarket_sentiment(max_markets: int = 200) -> Dict[str, List[Dict]]:
                 markets = future.result()
                 all_markets.extend(markets)
             except Exception as e:
-                print(f"  ⚠️ Error fetching {category}: {e}")
+                logger.warning(f"⚠️ Error fetching {category}: {e}")
     
     # Also fetch top markets by volume (any category)
     top_markets = fetch_markets(limit=50, category=None)
@@ -228,7 +231,7 @@ def fetch_polymarket_sentiment(max_markets: int = 200) -> Dict[str, List[Dict]]:
             seen_ids.add(mid)
             unique_markets.append(m)
     
-    print(f"  ✅ Fetched {len(unique_markets)} unique markets")
+    logger.info(f"✅ Fetched {len(unique_markets)} unique markets")
     
     # Match markets to assets and calculate sentiment
     asset_markets: Dict[str, List[Dict]] = {}
@@ -257,7 +260,7 @@ def fetch_polymarket_sentiment(max_markets: int = 200) -> Dict[str, List[Dict]]:
         asset_markets[asset_key] = asset_markets[asset_key][:5]
     
     matched_count = sum(len(v) for v in asset_markets.values())
-    print(f"  ✅ Matched {matched_count} markets to {len(asset_markets)} assets/categories")
+    logger.info(f"✅ Matched {matched_count} markets to {len(asset_markets)} assets/categories")
     
     return asset_markets
 
@@ -368,12 +371,12 @@ def print_polymarket_summary(asset_markets: Optional[Dict] = None):
     if asset_markets is None:
         asset_markets = fetch_polymarket_sentiment()
     
-    print("\n" + "=" * 100)
-    print("  🎯 POLYMARKET PREDICTION MARKET SENTIMENT")
-    print("=" * 100 + "\n")
+    logger.info("=" * 100)
+    logger.info("🎯 POLYMARKET PREDICTION MARKET SENTIMENT")
+    logger.info("=" * 100)
     
     if not asset_markets:
-        print("  ⚠️ No relevant prediction markets found\n")
+        logger.warning("⚠️ No relevant prediction markets found")
         return
     
     for asset_key, markets in sorted(asset_markets.items()):
@@ -389,9 +392,9 @@ def print_polymarket_summary(asset_markets: Optional[Dict] = None):
             "neutral": "⚪"
         }.get(agg.get("label"), "❓")
         
-        print(f"\n{label_emoji} {asset_key}")
-        print(f"   Sentiment: {agg.get('label', 'N/A').upper()} (score: {agg.get('score', 'N/A')})")
-        print(f"   Markets: {agg.get('market_count')} | Volume 24h: ${agg.get('total_volume', 0):,.0f}")
+        logger.info(f"{label_emoji} {asset_key}")
+        logger.info(f"   Sentiment: {agg.get('label', 'N/A').upper()} (score: {agg.get('score', 'N/A')})")
+        logger.info(f"   Markets: {agg.get('market_count')} | Volume 24h: ${agg.get('total_volume', 0):,.0f}")
         
         # Show top markets
         for i, m in enumerate(markets[:3], 1):
@@ -399,26 +402,26 @@ def print_polymarket_summary(asset_markets: Optional[Dict] = None):
             prob_str = f"{prob*100:.0f}%" if prob else "N/A"
             vol = m.get("volume_24h") or 0
             
-            print(f"   {i}. [{prob_str}] {m.get('question', 'N/A')[:70]}...")
-            print(f"      Vol: ${vol:,.0f} | Change: {m.get('price_change_1d') or 0:+.1f}%")
+            logger.info(f"   {i}. [{prob_str}] {m.get('question', 'N/A')[:70]}...")
+            logger.info(f"      Vol: ${vol:,.0f} | Change: {m.get('price_change_1d') or 0:+.1f}%")
     
-    print("\n" + "=" * 100)
-    print("  Score range: -1.0 (bearish) to +1.0 (bullish)")
-    print("  Probability: 0% (won't happen) to 100% (will happen)")
-    print("=" * 100 + "\n")
+    logger.info("=" * 100)
+    logger.info("  Score range: -1.0 (bearish) to +1.0 (bullish)")
+    logger.info("  Probability: 0% (won't happen) to 100% (will happen)")
+    logger.info("=" * 100)
 
 
 # Standalone test
 if __name__ == "__main__":
-    print("Testing Polymarket API...\n")
+    logger.info("Testing Polymarket API...")
     
     # Fetch and display sentiment
     asset_markets = fetch_polymarket_sentiment()
     print_polymarket_summary(asset_markets)
     
     # Show macro sentiment
-    print("\n📊 MACRO SENTIMENT SUMMARY:")
+    logger.info("📊 MACRO SENTIMENT SUMMARY:")
     macro = get_macro_sentiment()
     for key, sentiment in macro.items():
         if sentiment.get("score") is not None:
-            print(f"  {key}: {sentiment.get('label', 'N/A')} ({sentiment.get('score'):+.2f})")
+            logger.info(f"  {key}: {sentiment.get('label', 'N/A')} ({sentiment.get('score'):+.2f})")

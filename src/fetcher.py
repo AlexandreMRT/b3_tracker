@@ -2,7 +2,7 @@
 Módulo para buscar cotações usando yfinance
 """
 import yfinance as yf
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 import urllib.parse
@@ -12,6 +12,9 @@ import time
 from assets import get_all_assets, IBOVESPA_STOCKS, COMMODITIES, CRYPTO, CURRENCY, US_STOCKS
 from models import Asset, Quote
 from database import SessionLocal
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 # Initialize NLTK VADER for sentiment analysis
 try:
@@ -47,7 +50,7 @@ try:
     _vader.lexicon.update(pt_negative)
     
 except Exception as e:
-    print(f"⚠️ VADER not available: {e}")
+    logger.warning(f"⚠️ VADER not available: {e}")
     _vader = None
 
 # Initialize feedparser for Google News RSS
@@ -55,7 +58,7 @@ try:
     import feedparser
     _feedparser_available = True
 except Exception as e:
-    print(f"⚠️ feedparser not available: {e}")
+    logger.warning(f"⚠️ feedparser not available: {e}")
     _feedparser_available = False
 
 
@@ -68,7 +71,7 @@ def get_usd_brl_rate() -> float:
         if not data.empty:
             return float(data['Close'].iloc[-1])
     except Exception as e:
-        print(f"⚠️ Erro ao buscar cotação USD/BRL: {e}")
+        logger.warning(f"⚠️ Erro ao buscar cotação USD/BRL: {e}")
     
     # Fallback: valor aproximado
     return 6.20
@@ -138,7 +141,7 @@ def fetch_fundamental_data(ticker: yf.Ticker) -> dict:
             "num_analysts": info.get("numberOfAnalystOpinions"),
         }
     except Exception as e:
-        print(f"⚠️ Error fetching fundamentals: {e}")
+        logger.warning(f"⚠️ Error fetching fundamentals: {e}")
         return {}
 
 
@@ -181,63 +184,12 @@ def calculate_technical_indicators(hist, current_price: float) -> dict:
 
 
 def calculate_signals(quote_data: dict) -> dict:
-    """Calculate trading signals based on technical indicators"""
-    signals = {}
-    
-    # RSI signals
-    rsi = quote_data.get("rsi_14")
-    if rsi is not None:
-        signals["signal_rsi_oversold"] = 1 if rsi < 30 else 0
-        signals["signal_rsi_overbought"] = 1 if rsi > 70 else 0
-    
-    # 52-week high/low signals (within 5%)
-    pct_from_high = quote_data.get("pct_from_52w_high")
-    week_52_high = quote_data.get("week_52_high")
-    week_52_low = quote_data.get("week_52_low")
-    close = quote_data.get("close")
-    
-    if pct_from_high is not None:
-        signals["signal_52w_high"] = 1 if pct_from_high >= -5 else 0
-    
-    if week_52_low and close:
-        pct_from_low = ((close - week_52_low) / week_52_low) * 100
-        signals["signal_52w_low"] = 1 if pct_from_low <= 5 else 0
-    
-    # Volume spike (2x average)
-    volume_ratio = quote_data.get("volume_ratio")
-    if volume_ratio is not None:
-        signals["signal_volume_spike"] = 1 if volume_ratio >= 2.0 else 0
-    
-    # Golden/Death cross
-    ma_50_above_200 = quote_data.get("ma_50_above_200")
-    signals["signal_golden_cross"] = 1 if ma_50_above_200 == 1 else 0
-    signals["signal_death_cross"] = 1 if ma_50_above_200 == 0 else 0
-    
-    # Overall signal summary
-    bullish_count = sum([
-        signals.get("signal_rsi_oversold", 0),
-        signals.get("signal_52w_low", 0),
-        signals.get("signal_golden_cross", 0),
-        1 if quote_data.get("above_ma_50") == 1 else 0,
-        1 if quote_data.get("above_ma_200") == 1 else 0,
-    ])
-    
-    bearish_count = sum([
-        signals.get("signal_rsi_overbought", 0),
-        signals.get("signal_52w_high", 0),
-        signals.get("signal_death_cross", 0),
-        1 if quote_data.get("above_ma_50") == 0 else 0,
-        1 if quote_data.get("above_ma_200") == 0 else 0,
-    ])
-    
-    if bullish_count >= 3 and bullish_count > bearish_count:
-        signals["signal_summary"] = "bullish"
-    elif bearish_count >= 3 and bearish_count > bullish_count:
-        signals["signal_summary"] = "bearish"
-    else:
-        signals["signal_summary"] = "neutral"
-    
-    return signals
+    """Calculate trading signals based on technical indicators.
+
+    Delegates to the shared ``signals`` module and returns DB-ready 0/1 flags.
+    """
+    from signals import detect_signals as _detect
+    return _detect(quote_data).as_db_flags()
 
 
 def fetch_news_english(ticker_symbol: str, max_news: int = 10) -> list:
@@ -264,7 +216,7 @@ def fetch_news_english(ticker_symbol: str, max_news: int = 10) -> list:
         
         return results
     except Exception as e:
-        print(f"    ⚠️ Error fetching EN news for {ticker_symbol}: {e}")
+        logger.warning(f"⚠️ Error fetching EN news for {ticker_symbol}: {e}")
         return []
 
 
@@ -303,7 +255,7 @@ def fetch_news_portuguese(company_name: str, ticker: str, max_news: int = 10) ->
         
         return results
     except Exception as e:
-        print(f"    ⚠️ Error fetching PT news for {company_name}: {e}")
+        logger.warning(f"⚠️ Error fetching PT news for {company_name}: {e}")
         return []
 
 
@@ -430,7 +382,7 @@ def fetch_benchmark_data() -> dict:
     if _benchmark_cache:
         return _benchmark_cache
     
-    print("📊 Buscando dados de benchmark (IBOV, S&P500)...")
+    logger.info("📊 Buscando dados de benchmark (IBOV, S&P500)...")
     
     benchmarks = {
         "^BVSP": "ibov",   # Ibovespa
@@ -466,10 +418,10 @@ def fetch_benchmark_data() -> dict:
             result[f"{prefix}_change_1m"] = calculate_change_percent(current_price, price_1m)
             result[f"{prefix}_change_ytd"] = calculate_change_percent(current_price, price_ytd)
             
-            print(f"  ✅ {ticker_symbol}: YTD {result[f'{prefix}_change_ytd']:.1f}%")
+            logger.info(f"✅ {ticker_symbol}: YTD {result[f'{prefix}_change_ytd']:.1f}%")
             
         except Exception as e:
-            print(f"  ⚠️ Error fetching {ticker_symbol}: {e}")
+            logger.warning(f"⚠️ Error fetching {ticker_symbol}: {e}")
     
     _benchmark_cache = result
     return result
@@ -532,7 +484,7 @@ def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
         hist = ticker.history(period="max")
         
         if hist.empty:
-            print(f"⚠️ Sem dados para {ticker_symbol}")
+            logger.warning(f"⚠️ Sem dados para {ticker_symbol}")
             return None
         
         latest = hist.iloc[-1]
@@ -606,7 +558,7 @@ def fetch_quote_with_history(ticker_symbol: str) -> Optional[dict]:
         return result
         
     except Exception as e:
-        print(f"❌ Erro ao buscar {ticker_symbol}: {e}")
+        logger.error(f"❌ Erro ao buscar {ticker_symbol}: {e}")
         return None
 
 
@@ -623,7 +575,7 @@ def fetch_quote(ticker_symbol: str) -> Optional[dict]:
         hist = ticker.history(period="5d")
         
         if hist.empty:
-            print(f"⚠️ Sem dados para {ticker_symbol}")
+            logger.warning(f"⚠️ Sem dados para {ticker_symbol}")
             return None
         
         latest = hist.iloc[-1]
@@ -639,7 +591,7 @@ def fetch_quote(ticker_symbol: str) -> Optional[dict]:
         }
         
     except Exception as e:
-        print(f"❌ Erro ao buscar {ticker_symbol}: {e}")
+        logger.error(f"❌ Erro ao buscar {ticker_symbol}: {e}")
         return None
 
 
@@ -658,14 +610,108 @@ def get_or_create_asset(db: Session, ticker: str, info: dict, asset_type: str) -
         db.add(asset)
         db.commit()
         db.refresh(asset)
-        print(f"✅ Ativo criado: {ticker} - {info.get('name')}")
+        logger.info(f"✅ Ativo criado: {ticker} - {info.get('name')}")
     
     return asset
+
+
+def _build_quote_fields(quote_data: dict, price_brl: float, price_usd: float = None) -> dict:
+    """Build a dict of column→value pairs shared by both insert and update paths."""
+    g = quote_data.get  # shorthand
+    return {
+        # Price
+        "price_brl": price_brl,
+        "price_usd": price_usd,
+        "open_price": g("open"),
+        "high_price": g("high"),
+        "low_price": g("low"),
+        "volume": g("volume"),
+        # Historical
+        "change_1d": g("change_1d"),
+        "change_1w": g("change_1w"),
+        "change_1m": g("change_1m"),
+        "change_ytd": g("change_ytd"),
+        "price_1d_ago": g("price_1d"),
+        "price_1w_ago": g("price_1w"),
+        "price_1m_ago": g("price_1m"),
+        "price_ytd": g("price_ytd"),
+        "price_5y_ago": g("price_5y"),
+        "price_all_time": g("price_all"),
+        "change_5y": g("change_5y"),
+        "change_all": g("change_all"),
+        # Fundamental
+        "market_cap": g("market_cap"),
+        "pe_ratio": g("pe_ratio"),
+        "forward_pe": g("forward_pe"),
+        "pb_ratio": g("pb_ratio"),
+        "dividend_yield": g("dividend_yield"),
+        "eps": g("eps"),
+        # Risk
+        "beta": g("beta"),
+        "week_52_high": g("week_52_high"),
+        "week_52_low": g("week_52_low"),
+        "pct_from_52w_high": g("pct_from_52w_high"),
+        # Technical
+        "ma_50": g("ma_50"),
+        "ma_200": g("ma_200"),
+        "rsi_14": g("rsi_14"),
+        "above_ma_50": g("above_ma_50"),
+        "above_ma_200": g("above_ma_200"),
+        "ma_50_above_200": g("ma_50_above_200"),
+        # Financial health
+        "profit_margin": g("profit_margin"),
+        "roe": g("roe"),
+        "debt_to_equity": g("debt_to_equity"),
+        # Analyst
+        "analyst_rating": g("analyst_rating"),
+        "target_price": g("target_price"),
+        "num_analysts": g("num_analysts"),
+        # Benchmarks
+        "ibov_change_1d": g("ibov_change_1d"),
+        "ibov_change_1w": g("ibov_change_1w"),
+        "ibov_change_1m": g("ibov_change_1m"),
+        "ibov_change_ytd": g("ibov_change_ytd"),
+        "sp500_change_1d": g("sp500_change_1d"),
+        "sp500_change_1w": g("sp500_change_1w"),
+        "sp500_change_1m": g("sp500_change_1m"),
+        "sp500_change_ytd": g("sp500_change_ytd"),
+        "vs_ibov_1d": g("vs_ibov_1d"),
+        "vs_ibov_1m": g("vs_ibov_1m"),
+        "vs_ibov_ytd": g("vs_ibov_ytd"),
+        "vs_sp500_1d": g("vs_sp500_1d"),
+        "vs_sp500_1m": g("vs_sp500_1m"),
+        "vs_sp500_ytd": g("vs_sp500_ytd"),
+        # Signals
+        "signal_golden_cross": g("signal_golden_cross"),
+        "signal_death_cross": g("signal_death_cross"),
+        "signal_rsi_oversold": g("signal_rsi_oversold"),
+        "signal_rsi_overbought": g("signal_rsi_overbought"),
+        "signal_52w_high": g("signal_52w_high"),
+        "signal_52w_low": g("signal_52w_low"),
+        "signal_volume_spike": g("signal_volume_spike"),
+        "signal_summary": g("signal_summary"),
+        # Volatility
+        "volatility_30d": g("volatility_30d"),
+        "avg_volume_20d": g("avg_volume_20d"),
+        "volume_ratio": g("volume_ratio"),
+        # News sentiment
+        "news_sentiment_pt": g("news_sentiment_pt"),
+        "news_sentiment_en": g("news_sentiment_en"),
+        "news_sentiment_combined": g("news_sentiment_combined"),
+        "news_count_pt": g("news_count_pt"),
+        "news_count_en": g("news_count_en"),
+        "news_headline_pt": g("news_headline_pt"),
+        "news_headline_en": g("news_headline_en"),
+        "news_sentiment_label": g("news_sentiment_label"),
+    }
 
 
 def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, price_usd: float = None):
     """Salva uma cotação no banco de dados com dados históricos"""
     quote_date = quote_data["date"].date() if isinstance(quote_data["date"], datetime) else quote_data["date"]
+    
+    # Build the shared field values once – used for both update and create
+    field_values = _build_quote_fields(quote_data, price_brl, price_usd)
     
     # Verificar se já existe cotação para este ativo nesta data
     existing = db.query(Quote).filter(
@@ -675,182 +721,19 @@ def save_quote(db: Session, asset: Asset, quote_data: dict, price_brl: float, pr
     
     if existing:
         # Atualizar cotação existente
-        existing.price_brl = price_brl
-        existing.price_usd = price_usd
-        existing.open_price = quote_data.get("open")
-        existing.high_price = quote_data.get("high")
-        existing.low_price = quote_data.get("low")
-        existing.volume = quote_data.get("volume")
-        # Atualizar campos históricos
-        existing.change_1d = quote_data.get("change_1d")
-        existing.change_1w = quote_data.get("change_1w")
-        existing.change_1m = quote_data.get("change_1m")
-        existing.change_ytd = quote_data.get("change_ytd")
-        existing.price_1d_ago = quote_data.get("price_1d")
-        existing.price_1w_ago = quote_data.get("price_1w")
-        existing.price_1m_ago = quote_data.get("price_1m")
-        existing.price_ytd = quote_data.get("price_ytd")
-        existing.price_5y_ago = quote_data.get("price_5y")
-        existing.price_all_time = quote_data.get("price_all")
-        existing.change_5y = quote_data.get("change_5y")
-        existing.change_all = quote_data.get("change_all")
-        # Fundamental data
-        existing.market_cap = quote_data.get("market_cap")
-        existing.pe_ratio = quote_data.get("pe_ratio")
-        existing.forward_pe = quote_data.get("forward_pe")
-        existing.pb_ratio = quote_data.get("pb_ratio")
-        existing.dividend_yield = quote_data.get("dividend_yield")
-        existing.eps = quote_data.get("eps")
-        # Risk metrics
-        existing.beta = quote_data.get("beta")
-        existing.week_52_high = quote_data.get("week_52_high")
-        existing.week_52_low = quote_data.get("week_52_low")
-        existing.pct_from_52w_high = quote_data.get("pct_from_52w_high")
-        # Technical indicators
-        existing.ma_50 = quote_data.get("ma_50")
-        existing.ma_200 = quote_data.get("ma_200")
-        existing.rsi_14 = quote_data.get("rsi_14")
-        existing.above_ma_50 = quote_data.get("above_ma_50")
-        existing.above_ma_200 = quote_data.get("above_ma_200")
-        existing.ma_50_above_200 = quote_data.get("ma_50_above_200")
-        # Financial health
-        existing.profit_margin = quote_data.get("profit_margin")
-        existing.roe = quote_data.get("roe")
-        existing.debt_to_equity = quote_data.get("debt_to_equity")
-        # Analyst data
-        existing.analyst_rating = quote_data.get("analyst_rating")
-        existing.target_price = quote_data.get("target_price")
-        existing.num_analysts = quote_data.get("num_analysts")
-        # Benchmark data
-        existing.ibov_change_1d = quote_data.get("ibov_change_1d")
-        existing.ibov_change_1w = quote_data.get("ibov_change_1w")
-        existing.ibov_change_1m = quote_data.get("ibov_change_1m")
-        existing.ibov_change_ytd = quote_data.get("ibov_change_ytd")
-        existing.sp500_change_1d = quote_data.get("sp500_change_1d")
-        existing.sp500_change_1w = quote_data.get("sp500_change_1w")
-        existing.sp500_change_1m = quote_data.get("sp500_change_1m")
-        existing.sp500_change_ytd = quote_data.get("sp500_change_ytd")
-        existing.vs_ibov_1d = quote_data.get("vs_ibov_1d")
-        existing.vs_ibov_1m = quote_data.get("vs_ibov_1m")
-        existing.vs_ibov_ytd = quote_data.get("vs_ibov_ytd")
-        existing.vs_sp500_1d = quote_data.get("vs_sp500_1d")
-        existing.vs_sp500_1m = quote_data.get("vs_sp500_1m")
-        existing.vs_sp500_ytd = quote_data.get("vs_sp500_ytd")
-        # Signals
-        existing.signal_golden_cross = quote_data.get("signal_golden_cross")
-        existing.signal_death_cross = quote_data.get("signal_death_cross")
-        existing.signal_rsi_oversold = quote_data.get("signal_rsi_oversold")
-        existing.signal_rsi_overbought = quote_data.get("signal_rsi_overbought")
-        existing.signal_52w_high = quote_data.get("signal_52w_high")
-        existing.signal_52w_low = quote_data.get("signal_52w_low")
-        existing.signal_volume_spike = quote_data.get("signal_volume_spike")
-        existing.signal_summary = quote_data.get("signal_summary")
-        # Volatility
-        existing.volatility_30d = quote_data.get("volatility_30d")
-        existing.avg_volume_20d = quote_data.get("avg_volume_20d")
-        existing.volume_ratio = quote_data.get("volume_ratio")
-        # News sentiment
-        existing.news_sentiment_pt = quote_data.get("news_sentiment_pt")
-        existing.news_sentiment_en = quote_data.get("news_sentiment_en")
-        existing.news_sentiment_combined = quote_data.get("news_sentiment_combined")
-        existing.news_count_pt = quote_data.get("news_count_pt")
-        existing.news_count_en = quote_data.get("news_count_en")
-        existing.news_headline_pt = quote_data.get("news_headline_pt")
-        existing.news_headline_en = quote_data.get("news_headline_en")
-        existing.news_sentiment_label = quote_data.get("news_sentiment_label")
-        existing.fetched_at = datetime.utcnow()
-        print(f"🔄 Atualizado: {asset.ticker} = R$ {price_brl:.2f}")
+        for attr, value in field_values.items():
+            setattr(existing, attr, value)
+        existing.fetched_at = datetime.now(timezone.utc)
+        logger.info(f"🔄 Atualizado: {asset.ticker} = R$ {price_brl:.2f}")
     else:
         # Criar nova cotação
         quote = Quote(
             asset_id=asset.id,
-            price_brl=price_brl,
-            price_usd=price_usd,
-            open_price=quote_data.get("open"),
-            high_price=quote_data.get("high"),
-            low_price=quote_data.get("low"),
-            volume=quote_data.get("volume"),
-            # Campos históricos
-            change_1d=quote_data.get("change_1d"),
-            change_1w=quote_data.get("change_1w"),
-            change_1m=quote_data.get("change_1m"),
-            change_ytd=quote_data.get("change_ytd"),
-            price_1d_ago=quote_data.get("price_1d"),
-            price_1w_ago=quote_data.get("price_1w"),
-            price_1m_ago=quote_data.get("price_1m"),
-            price_ytd=quote_data.get("price_ytd"),
-            price_5y_ago=quote_data.get("price_5y"),
-            price_all_time=quote_data.get("price_all"),
-            change_5y=quote_data.get("change_5y"),
-            change_all=quote_data.get("change_all"),
-            # Fundamental data
-            market_cap=quote_data.get("market_cap"),
-            pe_ratio=quote_data.get("pe_ratio"),
-            forward_pe=quote_data.get("forward_pe"),
-            pb_ratio=quote_data.get("pb_ratio"),
-            dividend_yield=quote_data.get("dividend_yield"),
-            eps=quote_data.get("eps"),
-            # Risk metrics
-            beta=quote_data.get("beta"),
-            week_52_high=quote_data.get("week_52_high"),
-            week_52_low=quote_data.get("week_52_low"),
-            pct_from_52w_high=quote_data.get("pct_from_52w_high"),
-            # Technical indicators
-            ma_50=quote_data.get("ma_50"),
-            ma_200=quote_data.get("ma_200"),
-            rsi_14=quote_data.get("rsi_14"),
-            above_ma_50=quote_data.get("above_ma_50"),
-            above_ma_200=quote_data.get("above_ma_200"),
-            ma_50_above_200=quote_data.get("ma_50_above_200"),
-            # Financial health
-            profit_margin=quote_data.get("profit_margin"),
-            roe=quote_data.get("roe"),
-            debt_to_equity=quote_data.get("debt_to_equity"),
-            # Analyst data
-            analyst_rating=quote_data.get("analyst_rating"),
-            target_price=quote_data.get("target_price"),
-            num_analysts=quote_data.get("num_analysts"),
-            # Benchmark data
-            ibov_change_1d=quote_data.get("ibov_change_1d"),
-            ibov_change_1w=quote_data.get("ibov_change_1w"),
-            ibov_change_1m=quote_data.get("ibov_change_1m"),
-            ibov_change_ytd=quote_data.get("ibov_change_ytd"),
-            sp500_change_1d=quote_data.get("sp500_change_1d"),
-            sp500_change_1w=quote_data.get("sp500_change_1w"),
-            sp500_change_1m=quote_data.get("sp500_change_1m"),
-            sp500_change_ytd=quote_data.get("sp500_change_ytd"),
-            vs_ibov_1d=quote_data.get("vs_ibov_1d"),
-            vs_ibov_1m=quote_data.get("vs_ibov_1m"),
-            vs_ibov_ytd=quote_data.get("vs_ibov_ytd"),
-            vs_sp500_1d=quote_data.get("vs_sp500_1d"),
-            vs_sp500_1m=quote_data.get("vs_sp500_1m"),
-            vs_sp500_ytd=quote_data.get("vs_sp500_ytd"),
-            # Signals
-            signal_golden_cross=quote_data.get("signal_golden_cross"),
-            signal_death_cross=quote_data.get("signal_death_cross"),
-            signal_rsi_oversold=quote_data.get("signal_rsi_oversold"),
-            signal_rsi_overbought=quote_data.get("signal_rsi_overbought"),
-            signal_52w_high=quote_data.get("signal_52w_high"),
-            signal_52w_low=quote_data.get("signal_52w_low"),
-            signal_volume_spike=quote_data.get("signal_volume_spike"),
-            signal_summary=quote_data.get("signal_summary"),
-            # Volatility
-            volatility_30d=quote_data.get("volatility_30d"),
-            avg_volume_20d=quote_data.get("avg_volume_20d"),
-            volume_ratio=quote_data.get("volume_ratio"),
-            # News sentiment
-            news_sentiment_pt=quote_data.get("news_sentiment_pt"),
-            news_sentiment_en=quote_data.get("news_sentiment_en"),
-            news_sentiment_combined=quote_data.get("news_sentiment_combined"),
-            news_count_pt=quote_data.get("news_count_pt"),
-            news_count_en=quote_data.get("news_count_en"),
-            news_headline_pt=quote_data.get("news_headline_pt"),
-            news_headline_en=quote_data.get("news_headline_en"),
-            news_sentiment_label=quote_data.get("news_sentiment_label"),
-            quote_date=datetime.combine(quote_date, datetime.min.time())
+            quote_date=datetime.combine(quote_date, datetime.min.time()),
+            **field_values,
         )
         db.add(quote)
-        print(f"💰 Salvo: {asset.ticker} = R$ {price_brl:.2f}")
+        logger.info(f"💰 Salvo: {asset.ticker} = R$ {price_brl:.2f}")
     
     db.commit()
 
@@ -897,7 +780,7 @@ def fetch_single_asset(ticker: str, info: dict, asset_type: str, is_brazilian: b
             "price_usd": price_usd,
         }
     except Exception as e:
-        print(f"    ❌ Error fetching {ticker}: {e}")
+        logger.error(f"❌ Error fetching {ticker}: {e}")
         return None
 
 
@@ -928,15 +811,15 @@ def fetch_all_quotes():
     
     total_start = time.time()
     
-    print("\n" + "="*60)
-    print(f"🚀 Iniciando busca de cotações - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*60 + "\n")
+    logger.info("=" * 60)
+    logger.info(f"🚀 Iniciando busca de cotações - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 60)
     
     # =========================================================================
     # FASE 1: Prerequisites (paralelo)
     # =========================================================================
     phase1_start = time.time()
-    print("📊 Fase 1: Buscando dados de referência...")
+    logger.info("📊 Fase 1: Buscando dados de referência...")
     
     with ThreadPoolExecutor(max_workers=3) as executor:
         usd_future = executor.submit(get_usd_brl_rate)
@@ -945,8 +828,8 @@ def fetch_all_quotes():
         usd_brl = usd_future.result()
         benchmarks = bench_future.result()
     
-    print(f"   💵 USD/BRL: R$ {usd_brl:.4f}")
-    print(f"   ⏱️  Fase 1 concluída em {time.time() - phase1_start:.1f}s\n")
+    logger.info(f"💵 USD/BRL: R$ {usd_brl:.4f}")
+    logger.info(f"⏱️  Fase 1 concluída em {time.time() - phase1_start:.1f}s")
     
     # =========================================================================
     # FASE 2: Prepare all assets
@@ -974,13 +857,13 @@ def fetch_all_quotes():
         all_assets.append((ticker, info, "currency", False))
     
     total_assets = len(all_assets)
-    print(f"📈 Total de ativos para buscar: {total_assets}")
+    logger.info(f"📈 Total de ativos para buscar: {total_assets}")
     
     # =========================================================================
     # FASE 2: Fetch all quotes in parallel
     # =========================================================================
     phase2_start = time.time()
-    print(f"\n📊 Fase 2: Buscando cotações (8 workers paralelos)...")
+    logger.info(f"📊 Fase 2: Buscando cotações (8 workers paralelos)...")
     
     results = []
     success_count = 0
@@ -1002,18 +885,18 @@ def fetch_all_quotes():
                 else:
                     error_count += 1
             except Exception as e:
-                print(f"    ❌ Error processing {ticker}: {e}")
+                logger.error(f"❌ Error processing {ticker}: {e}")
                 error_count += 1
     
-    print(f"   ✅ Cotações: {success_count} sucesso, {error_count} erros")
-    print(f"   ⏱️  Fase 2 concluída em {time.time() - phase2_start:.1f}s\n")
+    logger.info(f"✅ Cotações: {success_count} sucesso, {error_count} erros")
+    logger.info(f"⏱️  Fase 2 concluída em {time.time() - phase2_start:.1f}s")
     
     # =========================================================================
     # FASE 3: Fetch news in parallel (only for stocks)
     # =========================================================================
     phase3_start = time.time()
     stocks_only = [r for r in results if r["asset_type"] in ("stock", "us_stock")]
-    print(f"📰 Fase 3: Buscando notícias para {len(stocks_only)} ações (5 workers)...")
+    logger.info(f"📰 Fase 3: Buscando notícias para {len(stocks_only)} ações (5 workers)...")
     
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(fetch_news_for_asset, r): r["ticker"] for r in stocks_only}
@@ -1023,15 +906,15 @@ def fetch_all_quotes():
                 future.result()  # Just ensure it completes
             except Exception as e:
                 ticker = futures[future]
-                print(f"    ⚠️ News error for {ticker}: {e}")
+                logger.warning(f"⚠️ News error for {ticker}: {e}")
     
-    print(f"   ⏱️  Fase 3 concluída em {time.time() - phase3_start:.1f}s\n")
+    logger.info(f"⏱️  Fase 3 concluída em {time.time() - phase3_start:.1f}s")
     
     # =========================================================================
     # FASE 4: Save all to database (sequential - SQLite safe)
     # =========================================================================
     phase4_start = time.time()
-    print(f"💾 Fase 4: Salvando {len(results)} registros no banco...")
+    logger.info(f"💾 Fase 4: Salvando {len(results)} registros no banco...")
     
     db = SessionLocal()
     try:
@@ -1053,10 +936,10 @@ def fetch_all_quotes():
                 )
                 saved_count += 1
             except Exception as e:
-                print(f"    ❌ Error saving {result['ticker']}: {e}")
+                logger.error(f"❌ Error saving {result['ticker']}: {e}")
         
-        print(f"   ✅ Salvos: {saved_count} registros")
-        print(f"   ⏱️  Fase 4 concluída em {time.time() - phase4_start:.1f}s\n")
+        logger.info(f"✅ Salvos: {saved_count} registros")
+        logger.info(f"⏱️  Fase 4 concluída em {time.time() - phase4_start:.1f}s")
         
     finally:
         db.close()
@@ -1065,12 +948,12 @@ def fetch_all_quotes():
     # SUMMARY
     # =========================================================================
     total_time = time.time() - total_start
-    print("="*60)
-    print(f"✅ CONCLUÍDO!")
-    print(f"   📊 Ativos processados: {success_count}/{total_assets}")
-    print(f"   ⏱️  Tempo total: {total_time:.1f}s ({total_time/60:.1f} min)")
-    print(f"   🚀 Velocidade: {total_assets/total_time:.1f} ativos/segundo")
-    print("="*60 + "\n")
+    logger.info("=" * 60)
+    logger.info(f"✅ CONCLUÍDO!")
+    logger.info(f"📊 Ativos processados: {success_count}/{total_assets}")
+    logger.info(f"⏱️  Tempo total: {total_time:.1f}s ({total_time/60:.1f} min)")
+    logger.info(f"🚀 Velocidade: {total_assets/total_time:.1f} ativos/segundo")
+    logger.info("=" * 60)
     
     return success_count, error_count
 

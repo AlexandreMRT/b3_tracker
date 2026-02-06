@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from models import Portfolio, Position, Transaction, TransactionType, Quote, Asset
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 
 
@@ -35,8 +35,8 @@ def create_portfolio(db: Session, user_id: str, name: str, description: str = No
         name=name,
         description=description,
         is_default=1 if is_default else 0,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
     )
     
     db.add(portfolio)
@@ -61,7 +61,7 @@ def update_portfolio(db: Session, portfolio_id: int, user_id: str, name: str = N
             db.query(Portfolio).filter(Portfolio.user_id == user_id).update({"is_default": 0})
         portfolio.is_default = 1 if is_default else 0
     
-    portfolio.updated_at = datetime.utcnow()
+    portfolio.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(portfolio)
     return portfolio
@@ -105,7 +105,7 @@ def update_position_from_transaction(db: Session, portfolio_id: int, ticker: str
             position.avg_price_brl = total_cost / new_quantity if new_quantity > 0 else 0
             position.quantity = new_quantity
             position.last_transaction_date = transaction.transaction_date
-            position.updated_at = datetime.utcnow()
+            position.updated_at = datetime.now(timezone.utc)
         else:
             # Create new position
             position = Position(
@@ -115,8 +115,8 @@ def update_position_from_transaction(db: Session, portfolio_id: int, ticker: str
                 avg_price_brl=transaction.price_brl,
                 first_purchase_date=transaction.transaction_date,
                 last_transaction_date=transaction.transaction_date,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
             )
             db.add(position)
     
@@ -124,7 +124,7 @@ def update_position_from_transaction(db: Session, portfolio_id: int, ticker: str
         if position:
             position.quantity -= transaction.quantity
             position.last_transaction_date = transaction.transaction_date
-            position.updated_at = datetime.utcnow()
+            position.updated_at = datetime.now(timezone.utc)
             
             # Remove position if quantity is zero or negative
             if position.quantity <= 0:
@@ -171,7 +171,7 @@ def add_transaction(
 ) -> Transaction:
     """Add a new transaction"""
     if not transaction_date:
-        transaction_date = datetime.utcnow()
+        transaction_date = datetime.now(timezone.utc)
     
     total_brl = (quantity * price_brl) + fees_brl
     
@@ -185,7 +185,7 @@ def add_transaction(
         fees_brl=fees_brl,
         transaction_date=transaction_date,
         notes=notes,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     
     db.add(transaction)

@@ -4,7 +4,7 @@ User management operations
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from models import User, Watchlist
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
@@ -64,7 +64,7 @@ def add_to_watchlist(db: Session, user_id: str, ticker: str, notes: str = None) 
         user_id=user_id,
         ticker=ticker.upper(),
         notes=notes,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     
     db.add(watchlist)
