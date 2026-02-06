@@ -459,15 +459,14 @@ async def get_news(
             if news_count > 0:
                 score = quote.news_sentiment_combined or 0
                 # Apply sentiment filter
-                if sentiment and (
-                    sentiment.lower() == "positive"
-                    and score <= 0.1
-                    or sentiment.lower() == "negative"
-                    and score >= -0.1
-                    or sentiment.lower() == "neutral"
-                    and abs(score) > 0.1
-                ):
-                    continue
+                if sentiment:
+                    s = sentiment.lower()
+                    if s == "positive" and score <= 0.1:  # noqa: SIM114
+                        continue
+                    elif s == "negative" and score >= -0.1:  # noqa: SIM114
+                        continue
+                    elif s == "neutral" and abs(score) > 0.1:
+                        continue
 
                 news_data.append(
                     {
@@ -953,10 +952,10 @@ async def add_new_transaction(
     try:
         trans_type = TransactionType[transaction_data.transaction_type.upper()]
     except KeyError:
-        raise HTTPException(
+        raise HTTPException(  # noqa: B904
             status_code=400,
             detail=f"Invalid transaction type: {transaction_data.transaction_type}",
-        ) from None
+        )
 
     transaction = add_transaction(
         db=db,

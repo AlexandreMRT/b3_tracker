@@ -103,8 +103,8 @@ def parse_outcome_prices(outcomes_str: str, prices_str: str) -> Dict[str, float]
     try:
         outcomes = json.loads(outcomes_str) if outcomes_str else []
         prices = json.loads(prices_str) if prices_str else []
-        return dict(zip(outcomes, prices, strict=False))
-    except (json.JSONDecodeError, TypeError):
+        return dict(zip(outcomes, prices, strict=True))
+    except (json.JSONDecodeError, TypeError, ValueError):
         return {}
 
 

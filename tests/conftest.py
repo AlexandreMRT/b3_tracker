@@ -561,7 +561,8 @@ def unauthenticated_client(_engine, db_session):
     app.dependency_overrides[get_db] = _override_get_db
 
     TestSessionLocal = sessionmaker(bind=_engine)
-    # Module-level references for monkey-patching (see app_client fixture).
+    # Import as module references to monkey-patch SessionLocal (distinct
+    # from the top-level ``from database import Base`` which only grabs a name).
     import database as db_module
     import api as api_module
 
