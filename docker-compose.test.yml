@@ -1,0 +1,38 @@
+# docker-compose.test.yml
+# Usage: docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+services:
+  test_db:
+    image: postgres:16-alpine
+    container_name: b3_test_postgres
+    environment:
+      POSTGRES_DB: b3tracker_test
+      POSTGRES_USER: b3user
+      POSTGRES_PASSWORD: test_password
+    tmpfs:
+      - /var/lib/postgresql/data  # RAM-backed for speed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U b3user -d b3tracker_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  tests:
+    build: .
+    container_name: b3_tests
+    depends_on:
+      test_db:
+        condition: service_healthy
+    volumes:
+      - ./tests:/app/tests
+      - ./src:/app/src
+      - ./pyproject.toml:/app/pyproject.toml
+    environment:
+      - DATABASE_URL=postgresql://b3user:test_password@test_db:5432/b3tracker_test
+      - SECRET_KEY=test-secret-key-for-ci
+      - PYTHONPATH=/app/src
+      - TZ=America/Sao_Paulo
+    command: >
+      sh -c "
+        pip install -q pytest pytest-cov pytest-asyncio httpx factory-boy &&
+        python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
+      "

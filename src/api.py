@@ -21,6 +21,7 @@ from database import SessionLocal, init_db, get_db
 from models import Asset, Quote, User, TransactionType
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
+from signals import detect_signals as _detect_signals
 
 # Import authentication and business logic
 from auth import oauth, create_access_token, get_current_user, get_or_create_user, OAUTH_REDIRECT_URI
@@ -142,13 +143,14 @@ app = FastAPI(
 )
 
 # Session middleware - required for OAuth
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+from auth import SECRET_KEY as _SECRET_KEY
+app.add_middleware(SessionMiddleware, secret_key=_SECRET_KEY)
 
-# CORS middleware - allow all origins for development
+# CORS middleware
+_CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -241,44 +243,11 @@ def quote_to_dict(quote: Quote) -> dict:
 
 
 def detect_signals(quote: Quote) -> List[str]:
-    """Detect trading signals for a quote"""
-    signals = []
-    
-    # RSI signals
-    if quote.rsi_14:
-        if quote.rsi_14 < 30:
-            signals.append("RSI_OVERSOLD")
-        elif quote.rsi_14 > 70:
-            signals.append("RSI_OVERBOUGHT")
-    
-    # Moving average signals
-    if quote.ma_50_above_200:
-        signals.append("GOLDEN_CROSS")
-    if quote.above_ma_50 and quote.above_ma_200:
-        signals.append("BULLISH_TREND")
-    elif quote.above_ma_50 == 0 and quote.above_ma_200 == 0:
-        signals.append("BEARISH_TREND")
-    
-    # 52 week signals
-    if quote.pct_from_52w_high is not None and quote.pct_from_52w_high > -5:
-        signals.append("NEAR_52W_HIGH")
-    if quote.week_52_low and quote.price_brl:
-        pct_from_low = ((quote.price_brl - quote.week_52_low) / quote.week_52_low) * 100
-        if pct_from_low < 5:
-            signals.append("NEAR_52W_LOW")
-    
-    # Volume spike
-    if quote.volume_ratio and quote.volume_ratio > 2.0:
-        signals.append("VOLUME_SPIKE")
-    
-    # News sentiment
-    if quote.news_sentiment_combined:
-        if quote.news_sentiment_combined > 0.3:
-            signals.append("POSITIVE_NEWS")
-        elif quote.news_sentiment_combined < -0.3:
-            signals.append("NEGATIVE_NEWS")
-    
-    return signals
+    """Detect trading signals for a quote.
+
+    Delegates to the shared ``signals`` module and returns human-readable labels.
+    """
+    return _detect_signals(quote).as_labels()
 
 
 # =============================================================================
@@ -317,7 +286,7 @@ async def get_quotes(
         None, 
         description="Filtrar por tipo de ativo",
         enum=["stock", "us_stock", "commodity", "crypto", "currency"],
-        example="stock"
+        examples=["stock"]
     ),
     limit: int = Query(200, description="Número máximo de resultados", ge=1, le=500)
 ):
@@ -412,7 +381,7 @@ async def get_signals(
         enum=["RSI_OVERSOLD", "RSI_OVERBOUGHT", "GOLDEN_CROSS", "BULLISH_TREND", 
               "BEARISH_TREND", "NEAR_52W_HIGH", "NEAR_52W_LOW", "VOLUME_SPIKE",
               "POSITIVE_NEWS", "NEGATIVE_NEWS"],
-        example="RSI_OVERSOLD"
+        examples=["RSI_OVERSOLD"]
     )
 ):
     """
@@ -482,7 +451,7 @@ async def get_news(
         None, 
         description="Filtrar por sentimento",
         enum=["positive", "negative", "neutral"],
-        example="positive"
+        examples=["positive"]
     )
 ):
     """
@@ -688,7 +657,7 @@ async def get_movers(
         "1d", 
         description="Período de análise",
         enum=["1d", "1w", "1m", "ytd"],
-        example="ytd"
+        examples=["ytd"]
     ),
     limit: int = Query(10, description="Número de ativos por lista", ge=1, le=50)
 ):
@@ -752,11 +721,13 @@ async def get_movers(
 # AUTHENTICATION ENDPOINTS
 # =============================================================================
 
+_TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+
 @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
 async def login_page():
     """Serve the login page"""
     try:
-        with open("/app/src/templates/login.html", "r") as f:
+        with open(os.path.join(_TEMPLATES_DIR, "login.html"), "r") as f:
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
         return HTMLResponse(content="<h1>Login page not found</h1>", status_code=404)
@@ -814,8 +785,11 @@ async def get_me(current_user: User = Depends(get_current_user)):
 async def test_login(email: str = "test@example.com", name: str = "Test User", db: Session = Depends(get_db)):
     """
     Development endpoint to create a test user and get a token.
-    REMOVE THIS IN PRODUCTION!
+    Only available when DEV_MODE=1 environment variable is set.
     """
+    if os.getenv("DEV_MODE") != "1":
+        raise HTTPException(status_code=404, detail="Not found")
+    
     import uuid
     
     # Get or create test user
@@ -838,7 +812,7 @@ async def test_login(email: str = "test@example.com", name: str = "Test User", d
             "email": user.email,
             "name": user.name
         },
-        "message": "⚠️ This is a development endpoint. Remove in production!"
+        "message": "⚠️ This is a development endpoint."
     }
 
 

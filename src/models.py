@@ -4,10 +4,15 @@ Modelos do banco de dados
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, Text, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 from database import Base
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now, compatible with SQLAlchemy defaults."""
+    return datetime.now(timezone.utc)
 
 
 class Asset(Base):
@@ -20,8 +25,8 @@ class Asset(Base):
     sector = Column(String(50), nullable=False)
     asset_type = Column(String(20), nullable=False)  # stock, commodity, crypto, currency
     unit = Column(String(20), default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     
     # Relacionamento com cotações
     quotes = relationship("Quote", back_populates="asset", cascade="all, delete-orphan")
@@ -152,7 +157,7 @@ class Quote(Base):
     polymarket_top_probability = Column(Float, nullable=True)     # Top market probability
     
     quote_date = Column(DateTime, nullable=False)  # Data da cotação
-    fetched_at = Column(DateTime, default=datetime.utcnow)  # Quando foi buscado
+    fetched_at = Column(DateTime, default=_utcnow)  # Quando foi buscado
     
     # Relacionamento com ativo
     asset = relationship("Asset", back_populates="quotes")
@@ -182,8 +187,8 @@ class User(Base):
     default_currency = Column(String(3), default="BRL")  # BRL or USD
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_login = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    last_login = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     
     # Relationships
     watchlists = relationship("Watchlist", back_populates="user", cascade="all, delete-orphan")
@@ -201,7 +206,7 @@ class Watchlist(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     ticker = Column(String(20), nullable=False, index=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
     
     # Relationships
     user = relationship("User", back_populates="watchlists")
@@ -235,8 +240,8 @@ class Portfolio(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     is_default = Column(Integer, default=0)  # 1 if default portfolio
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     
     # Relationships
     user = relationship("User", back_populates="portfolios")
@@ -265,8 +270,8 @@ class Position(Base):
     notes = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     
     # Relationships
     portfolio = relationship("Portfolio", back_populates="positions")
@@ -300,7 +305,7 @@ class Transaction(Base):
     notes = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
     
     # Relationships
     portfolio = relationship("Portfolio", back_populates="transactions")

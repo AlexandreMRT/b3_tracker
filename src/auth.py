@@ -2,7 +2,7 @@
 Authentication module with Google OAuth 2.0 and JWT tokens
 """
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -43,9 +43,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Create a JWT access token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -90,7 +90,7 @@ def get_current_user(
         )
     
     # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     db.commit()
     
     return user
@@ -105,7 +105,7 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
         # Update user info in case it changed
         user.name = name
         user.picture_url = picture_url
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         db.commit()
         db.refresh(user)
         return user
@@ -117,7 +117,7 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
         # Link Google account to existing user
         user.google_id = google_id
         user.picture_url = picture_url
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         db.commit()
         db.refresh(user)
         return user
@@ -128,8 +128,8 @@ def get_or_create_user(db: Session, google_id: str, email: str, name: str, pictu
         email=email,
         name=name,
         picture_url=picture_url,
-        created_at=datetime.utcnow(),
-        last_login=datetime.utcnow()
+        created_at=datetime.now(timezone.utc),
+        last_login=datetime.now(timezone.utc)
     )
     
     db.add(user)

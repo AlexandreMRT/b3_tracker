@@ -1,0 +1,49 @@
+[project]
+name = "b3-tracker"
+version = "1.0.0"
+description = "Brazilian stock market tracker with technical analysis, news sentiment, and portfolio management"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "unit: Unit tests (no DB, no network)",
+    "integration: Integration tests (requires DB)",
+    "slow: Slow tests (external API calls)",
+]
+# Allow importing from src/
+pythonpath = ["src"]
+filterwarnings = [
+    "error::DeprecationWarning",           # treat our own deprecation warnings as errors
+    "ignore::DeprecationWarning:jose",     # python-jose uses datetime.utcnow() internally
+    "ignore::DeprecationWarning:sqlalchemy.sql.schema",  # SQLAlchemy default= callable inspection
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/test_multiuser.py",
+    "src/__pycache__/*",
+    "src/main.py",
+    "src/scheduler.py",
+    "src/exporter.py",
+    "src/polymarket.py",
+    "src/logger.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 60
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "pass",
+]

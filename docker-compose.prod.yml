@@ -1,0 +1,53 @@
+# Production overrides – use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Key differences from dev:
+#   • No source-code volume mounts (uses baked-in image)
+#   • Enforces LOG_LEVEL=WARNING
+#   • DEV_MODE=0 (disables test-login and debug endpoints)
+#   • No exposed Postgres port (DB only reachable from the app network)
+
+services:
+  db:
+    ports: !reset []          # Remove the host-mapped 5433 port
+
+  app:
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+      # No ./src:/app/src mount
+    environment:
+      - TZ=America/Sao_Paulo
+      - SCHEDULE_ENABLED=true
+      - SCHEDULE_TIME=18:00
+      - DATABASE_URL=postgresql://b3user:${DB_PASSWORD}@db:5432/b3tracker
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SECRET_KEY=${SECRET_KEY}
+      - LOG_LEVEL=WARNING
+
+  api:
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+      # No ./src:/app/src mount
+    environment:
+      - TZ=America/Sao_Paulo
+      - DATABASE_URL=postgresql://b3user:${DB_PASSWORD}@db:5432/b3tracker
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SECRET_KEY=${SECRET_KEY}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI}
+      - DEV_MODE=0
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - LOG_LEVEL=WARNING
+
+  runner:
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+      # No ./src:/app/src mount
+    environment:
+      - TZ=America/Sao_Paulo
+      - DATABASE_URL=postgresql://b3user:${DB_PASSWORD}@db:5432/b3tracker
+      - LOG_LEVEL=WARNING

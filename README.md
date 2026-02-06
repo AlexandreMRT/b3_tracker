@@ -2,16 +2,19 @@
 
 Rastreador de cotações da bolsa brasileira (B3), ações americanas, commodities e criptomoedas com análise técnica, fundamentalista e sinais de trading para alimentar modelos de AI.
 
-## 📊 Status Atual (2026-01-16)
+## 📊 Status Atual (2026-02-05)
 
-✅ **Sistema operacional** - Última execução: 16/01/2026  
+✅ **Sistema operacional** - Última atualização: 05/02/2026  
 📊 **128/128 ativos** processados com sucesso  
-⚡ **~48s** tempo total de fetch (8 workers)  
+⚡ **~45s** tempo total de fetch (8 workers)  
 🇧🇷 **101 ações brasileiras** + 20 US stocks + 4 commodities + 2 crypto  
-📈 **Benchmarks YTD**: IBOV +1.3% | S&P 500 +1.9% | USD/BRL R$ 5.37  
-🚦 **Sinais ativos**: 65 bullish | 19 bearish | 26 RSI overbought | 5 RSI oversold  
-📰 **Sentimento**: 22 notícias positivas | 5 negativas | 74 neutras  
+📈 **Benchmarks YTD**: IBOV +13.0% | S&P 500 -0.7% | USD/BRL R$ 5.27  
+🚦 **Sinais ativos**: 78 bullish | 11 bearish | 48 RSI overbought | 5 RSI oversold  
+📰 **Sentimento**: 19 notícias positivas | 7 negativas | 75 neutras  
 🧠 **Algorithmic watchlist**: scoring automático com RSI + tendência + news  
+🧪 **173 testes** passando (pytest) | **66.6% cobertura** | 0 warnings  
+📝 **Logging estruturado** via módulo centralizado (`LOG_LEVEL` configurável)  
+🐳 **Docker hardened** — non-root user, healthchecks, compose de produção  
 
 ## ✨ Recursos
 
@@ -28,6 +31,9 @@ Rastreador de cotações da bolsa brasileira (B3), ações americanas, commoditi
 - 🔮 **Polymarket sentiment** - Dados de mercados de previsão (cripto, macro, geopolítica)
 - 🧠 **Algorithmic watchlist** - Score por confluência de sinais e news
 - 🤖 **AI-ready exports** - JSON otimizado para modelos de machine learning
+- 🧪 **Test suite** - 173 testes (pytest) com 66.6% de cobertura
+- 📝 **Structured logging** - Módulo centralizado com níveis configuráveis
+- 🐳 **Production Docker** - Non-root user, healthchecks, `docker-compose.prod.yml`
 
 ## 🚀 Quick Start
 
@@ -158,24 +164,41 @@ curl http://localhost:8000/api/sectors
 
 ```
 b3_tracker/
-├── docker-compose.yml    # Orquestração Docker (PostgreSQL + app + api)
-├── Dockerfile            # Imagem Python
-├── requirements.txt      # Dependências
+├── docker-compose.yml         # Orquestração Docker (PostgreSQL + app + api)
+├── docker-compose.prod.yml    # Overrides de produção (sem --reload, sem volume mounts)
+├── Dockerfile                 # Imagem Python (non-root user, healthcheck)
+├── .dockerignore              # Exclui __pycache__, .git, .env, venv
+├── requirements.txt           # Dependências
+├── pyproject.toml             # Configuração pytest, coverage, markers
 ├── src/
 │   ├── main.py           # CLI entry point
 │   ├── api.py            # REST API (FastAPI)
 │   ├── assets.py         # Lista de ativos
+│   ├── auth.py           # Google OAuth 2.0 + JWT
 │   ├── database.py       # Conexão PostgreSQL/SQLAlchemy
 │   ├── models.py         # Modelos de dados (70+ campos)
 │   ├── fetcher.py        # Busca cotações + indicadores
 │   ├── exporter.py       # Exporta CSV/JSON + reports
+│   ├── logger.py         # Logging centralizado (configurável via LOG_LEVEL)
+│   ├── polymarket.py     # Polymarket sentiment integration
+│   ├── portfolio.py      # Portfólios, posições e transações
 │   ├── scheduler.py      # Agendamento diário
-│   └── scoring.py        # Score algorítmico (watchlist)
+│   ├── scoring.py        # Score algorítmico (watchlist)
+│   ├── signals.py        # Detecção unificada de sinais de trading
+│   └── users.py          # Gestão de usuários e watchlists
+├── tests/
+│   ├── conftest.py       # Fixtures (SQLite in-memory, TestClient)
+│   ├── test_api.py       # Testes de integração da API (41 testes)
+│   ├── test_auth.py      # Testes de autenticação JWT
+│   ├── test_fetcher.py   # Testes de lógica de cálculo
+│   ├── test_portfolio.py # Testes de portfólio e transações
+│   ├── test_scoring.py   # Testes de scoring algorítmico
+│   ├── test_signals.py   # Testes de detecção de sinais (35 testes)
+│   └── test_users.py     # Testes de usuários e watchlists
 ├── data/                 # Arquivos locais / volume
 └── exports/              # Arquivos exportados
     ├── cotacoes_YYYY-MM-DD.csv
     ├── cotacoes_YYYY-MM-DD.json
-    ├── ai_analysis_YYYY-MM-DD.json
     ├── report_YYYY-MM-DD.md        # 📄 Human report
     └── ai_report_YYYY-MM-DD.json   # 🤖 AI report
 ```
@@ -398,6 +421,9 @@ Summary: 12 positive | 5 negative | 59 neutral | 96 stocks with news
 | `TZ` | `America/Sao_Paulo` | Timezone |
 | `DATABASE_URL` | `postgresql://b3user:***@db:5432/b3tracker` | Conexão PostgreSQL |
 | `EXPORTS_PATH` | `/app/exports` | Pasta de exportação |
+| `LOG_LEVEL` | `INFO` | Nível de log (DEBUG, INFO, WARNING, ERROR) |
+| `DEV_MODE` | `1` | Modo dev (habilita test-login e debug) |
+| `CORS_ORIGINS` | `http://localhost:3000,...` | Origens permitidas para CORS |
 
 ### Modificar horário de execução
 
@@ -426,11 +452,31 @@ US_STOCKS = {
 }
 ```
 
+### Rodar testes
+
+```bash
+# Rodar todos os testes
+python -m pytest tests/ -v
+
+# Com cobertura
+python -m pytest tests/ --cov=src --cov-report=term-missing
+
+# Apenas testes unitários (sem DB)
+python -m pytest tests/ -m unit
+```
+
 ### Rodar localmente (sem Docker)
 
 ```bash
 pip install -r requirements.txt
 python src/main.py --once
+```
+
+### Deploy em produção
+
+```bash
+# Usa overrides de produção (sem --reload, sem volume mounts de código, DEV_MODE=0)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 ### Comandos úteis de desenvolvimento
@@ -454,13 +500,21 @@ docker compose run --rm runner python src/main.py --export --json
 
 ## 🗺️ Roadmap (Resumo)
 
+**Concluído ✅**
+- Test suite — 173 testes, 66.6% cobertura, 0 warnings
+- Logging estruturado — módulo centralizado substituindo print()
+- Docker hardened — non-root user, healthchecks, docker-compose.prod.yml
+- Sinal unificado — módulo signals.py (corrigiu threshold drift entre fetcher/api)
+- Deduplicação — save_quote() reduziu de ~170 linhas duplicadas para helper único
+
 **Alta prioridade**
 - Web dashboard (React/Vue ou Jinja2 SSR) com portfólio, transações e watchlist
-- Test suite (pytest + CI)
 - Telegram bot de alertas (RSI, cross, volume, news)
+- CI/CD pipeline (GitHub Actions)
 
 **Média prioridade**
 - Weekly email report
+- Data quality & health monitor
 - Static HTML dashboard diário (Chart.js/Plotly)
 
 **Backlog**

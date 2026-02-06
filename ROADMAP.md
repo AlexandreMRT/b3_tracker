@@ -2,7 +2,7 @@
 
 > This file is structured for AI consumption. Use it to continue development in future sessions.
 
-## 📊 Current State (v1.0)
+## 📊 Current State (v1.1 — 2026-02-05)
 
 ### Implemented Features
 - [x] 128 assets tracked (101 BR stocks, 20 US stocks, 4 commodities, 2 crypto)
@@ -25,16 +25,23 @@
 - [x] P&L calculations, dividends, IRR tracking
 - [x] Watchlist per user
 - [x] 36 authenticated API endpoints
+- [x] **Test suite**: 173 tests (pytest), 66.6% coverage, 0 warnings
+- [x] **Unified signal detection** (`src/signals.py`) — single source of truth for all signal logic
+- [x] **Structured logging** (`src/logger.py`) — replaced 70+ print() calls with configurable logging
+- [x] **Docker hardening** — non-root user, healthchecks, `.dockerignore`, `docker-compose.prod.yml`
+- [x] **Deduplicated save_quote()** — 73 duplicate fields collapsed into shared `_build_quote_fields()` helper
+- [x] **Security fixes** — unified SECRET_KEY, restricted CORS, guarded test-login endpoint
 
 ### Tech Stack
-- Python 3.11
-- PostgreSQL with SQLAlchemy 2.0
+- Python 3.11 (Docker) / 3.13 (local dev)
+- PostgreSQL 16 with SQLAlchemy 2.0
 - yfinance for market data
 - FastAPI + uvicorn for REST API
 - Google OAuth 2.0 with JWT tokens
 - NLTK VADER for sentiment analysis
 - feedparser for Google News RSS
 - Docker Compose for orchestration
+- pytest + httpx for testing (SQLite in-memory with StaticPool)
 
 ---
 
@@ -69,34 +76,33 @@ Create a modern web interface for portfolio management:
 
 ---
 
-### 2. Test Suite 🧪
-**Priority: HIGH | Effort: MEDIUM**
+### 2. ~~Test Suite~~ ✅ COMPLETED (2026-02-05)
+**Status: DONE**
 
-Implement comprehensive testing to ensure reliability:
-- Unit tests for business logic (portfolio calculations, signals)
-- Integration tests for API endpoints
-- Database tests with test fixtures
-- Authentication flow tests
-- End-to-end tests for critical user journeys
+Comprehensive test suite implemented:
+- ✅ 173 tests across 7 test files
+- ✅ 66.6% code coverage (threshold: 60%)
+- ✅ 0 warnings (DeprecationWarning treated as error)
+- ✅ Unit tests for signals, scoring, fetcher calculations, portfolio, users
+- ✅ Integration tests for 41 API endpoints
+- ✅ Authentication flow tests (JWT creation/verification)
+- ✅ SQLite in-memory DB with StaticPool for fast isolated tests
+- ✅ pyproject.toml with pytest config, markers, coverage settings
 
-**Implementation notes:**
-- Use pytest as test framework
-- pytest-asyncio for async tests
-- Factory Boy for test data generation
-- Separate test database (PostgreSQL or SQLite in-memory)
-- GitHub Actions for CI/CD
-- Target: 80%+ code coverage
+**Files created:**
+- `tests/conftest.py` — fixtures (engine, sessions, TestClient, auth override)
+- `tests/test_api.py` — 41 API integration tests
+- `tests/test_auth.py` — JWT token tests
+- `tests/test_fetcher.py` — pure-logic function tests
+- `tests/test_portfolio.py` — portfolio CRUD & P&L tests
+- `tests/test_scoring.py` — algorithmic watchlist scoring tests
+- `tests/test_signals.py` — unified signal detection tests (35 tests)
+- `tests/test_users.py` — user management & watchlist tests
+- `pyproject.toml` — pytest, coverage, filterwarnings config
 
-**Files to create:**
-- `tests/__init__.py`
-- `tests/conftest.py` (pytest fixtures)
-- `tests/test_auth.py` (OAuth and JWT tests)
-- `tests/test_portfolio.py` (portfolio logic tests)
-- `tests/test_api.py` (API endpoint tests)
-- `tests/test_database.py` (model tests)
-- `tests/factories.py` (test data factories)
-- `.github/workflows/tests.yml` (CI pipeline)
-- `requirements-dev.txt` (test dependencies)
+**Still TODO:**
+- [ ] GitHub Actions CI/CD pipeline (`.github/workflows/tests.yml`)
+- [ ] Increase coverage to 80%+ (add exporter, scheduler, polymarket tests)
 
 ---
 
@@ -180,15 +186,14 @@ Free forever VM with:
 - Telegram bot running 24/7
 
 **Implementation notes:**
-- Create `deploy/` folder with scripts
-- Use docker-compose in production mode
+- `docker-compose.prod.yml` already created (no volume mounts, DEV_MODE=0, LOG_LEVEL=WARNING)
+- Deploy: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
 - Setup Caddy or nginx for HTTPS
 - Use Cloudflare for DNS/protection
-- Backup SQLite to object storage
+- Backup PostgreSQL with pg_dump to object storage
 
 **Files to create:**
 - `deploy/setup.sh` (server setup script)
-- `deploy/docker-compose.prod.yml` (production config)
 - `deploy/Caddyfile` (reverse proxy)
 - `deploy/README.md` (deployment guide)
 
@@ -217,14 +222,14 @@ Generate a beautiful self-contained HTML file daily:
 - `src/templates/dashboard.html` (new)
 - `src/fetcher.py` (call dashboard generation after fetch)
 
-### 5. Multi-User System with Google OAuth 👥
-**Priority: HIGH | Effort: HIGH**
+### 5. ~~Multi-User System with Google OAuth~~ ✅ COMPLETED
+**Status: DONE**
 
-Transform into multi-user platform:
-- Google OAuth 2.0 authentication
-- User registration and profile management
-- Personal watchlists and portfolios
-- Privacy: users see only their own data
+Multi-user platform implemented:
+- ✅ Google OAuth 2.0 authentication
+- ✅ User registration and profile management
+- ✅ Personal watchlists and portfolios
+- ✅ Privacy: users see only their own data
 
 **Architecture changes required:**
 - **Database upgrade**: Migrate from SQLite to PostgreSQL
@@ -305,16 +310,16 @@ services:
 
 ---
 
-### 6. Portfolio Tracking 💼
-**Priority: HIGH | Effort: MEDIUM** (requires Multi-User System #5)
+### 6. ~~Portfolio Tracking~~ ✅ COMPLETED
+**Status: DONE**
 
-Track personal portfolio with multi-user support:
-- Add/edit positions: ticker, quantity, avg price, date
-- Calculate total return, IRR, profit/loss
-- Compare vs IBOV/S&P 500
-- Dividend tracking and yield calculation
-- Historical performance charts
-- Portfolio diversification analysis
+Personal portfolio tracking implemented:
+- ✅ Add/edit positions: ticker, quantity, avg price, date
+- ✅ Calculate total return, IRR, profit/loss
+- ✅ Dividend tracking and yield calculation
+- ✅ Multi-portfolio support per user
+- [ ] Compare vs IBOV/S&P 500 (pending)
+- [ ] Historical performance charts (pending — requires frontend)
 
 **Data model:**
 ```python
@@ -462,13 +467,18 @@ Use this prompt to continue development:
 ```
 I'm working on B3 Tracker, a stock market tracking application.
 
-Current state:
+Current state (v1.1 — 2026-02-05):
 - 128 assets (101 BR + 20 US stocks + 4 commodities + 2 crypto)
 - Parallel fetch (~48s for all)
 - Polymarket sentiment integration
 - Technical indicators, fundamentals, news sentiment
-- REST API with FastAPI
-- Docker Compose setup
+- REST API with FastAPI (36 authenticated endpoints)
+- Docker Compose setup (dev + production)
+- Multi-user with Google OAuth 2.0
+- Portfolio tracking with P&L, dividends, IRR
+- 173 tests (pytest), 66.6% coverage
+- Unified signal detection (src/signals.py)
+- Structured logging (src/logger.py)
 
 Check ROADMAP.md for detailed feature plans.
 
@@ -492,6 +502,15 @@ docker compose run --rm runner python src/main.py --signals
 # Generate reports
 docker compose run --rm runner python src/main.py --report
 
+# Run tests
+python -m pytest tests/ -v
+
+# Run tests with coverage
+python -m pytest tests/ --cov=src --cov-report=term-missing
+
+# Deploy to production
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
 # Test API
 curl http://localhost:8000/api/quotes/PETR4
 curl http://localhost:8000/api/signals
@@ -499,4 +518,4 @@ curl http://localhost:8000/api/signals
 
 ---
 
-*Last updated: 2026-01-17*
+*Last updated: 2026-02-05*
