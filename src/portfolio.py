@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from models import Portfolio, Position, Transaction, TransactionType, Quote, Asset
-from datetime import datetime, date, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 

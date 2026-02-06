@@ -2,7 +2,6 @@
 Unit tests for the scoring module (build_algorithmic_watchlist).
 These are pure-function tests – no DB, no network.
 """
-import pytest
 from scoring import build_algorithmic_watchlist
 
 

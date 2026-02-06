@@ -2,7 +2,7 @@
 Tests for portfolio operations – uses the in-memory DB from conftest.
 """
 import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from portfolio import (
     get_user_portfolios,
@@ -12,15 +12,13 @@ from portfolio import (
     delete_portfolio,
     get_portfolio_positions,
     get_position_by_ticker,
-    update_position_from_transaction,
     add_transaction,
     delete_transaction,
     get_portfolio_transactions,
-    recalculate_position,
     calculate_position_performance,
     calculate_portfolio_performance,
 )
-from models import Portfolio, Position, Transaction, TransactionType
+from models import Position, TransactionType
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +164,7 @@ class TestTransactions:
     def test_delete_transaction_recalculates(self, db_session, sample_user):
         p = create_portfolio(db_session, str(sample_user.id), "Delete TX Test")
 
-        tx1 = add_transaction(db_session, p.id, "RENT3.SA", TransactionType.BUY, 100, 50.00)
+        _tx1 = add_transaction(db_session, p.id, "RENT3.SA", TransactionType.BUY, 100, 50.00)  # noqa: F841
         tx2 = add_transaction(db_session, p.id, "RENT3.SA", TransactionType.BUY, 50, 60.00)
 
         # Delete second transaction -> should recalculate to just the first buy

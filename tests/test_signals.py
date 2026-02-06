@@ -1,10 +1,8 @@
 """
 Unit tests for the shared signals module.
 """
-import pytest
 from signals import (
     detect_signals,
-    SignalResult,
     RSI_OVERSOLD,
     RSI_OVERBOUGHT,
     VOLUME_SPIKE_RATIO,

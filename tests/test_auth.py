@@ -5,9 +5,8 @@ No network, no Google OAuth (those require integration tests).
 import pytest
 import uuid
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
 
-from auth import create_access_token, verify_token, SECRET_KEY
+from auth import create_access_token, verify_token
 from fastapi import HTTPException
 
 

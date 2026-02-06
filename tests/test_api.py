@@ -2,12 +2,6 @@
 Integration tests for the FastAPI REST API.
 Uses TestClient with an in-memory SQLite backend.
 """
-import pytest
-from datetime import datetime
-
-from models import Asset, Quote
-
-
 # ---------------------------------------------------------------------------
 # Health / System endpoints
 # ---------------------------------------------------------------------------

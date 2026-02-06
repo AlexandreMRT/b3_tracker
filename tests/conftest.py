@@ -8,9 +8,7 @@ Provides:
 """
 import sys
 import os
-import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
 # Set test environment BEFORE any src imports.
 # database.py reads DATABASE_URL at import time; we must NOT set it so the
@@ -36,7 +34,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from database import Base  # noqa: E402
 from models import (  # noqa: E402
-    Asset, Quote, User, Watchlist,
+    Asset, Quote, User,
     Portfolio, Position, Transaction, TransactionType,
 )
 
@@ -384,7 +382,9 @@ def app_client(_engine, db_session, sample_user):
     # 3) Patch SessionLocal in EVERY module that imported it directly so that
     #    endpoints using `db = SessionLocal()` also hit the test engine.
     TestSessionLocal = sessionmaker(bind=_engine)
-    import database as db_module
+    # Import as module references to monkey-patch SessionLocal (distinct
+    # from the top-level ``from database import Base`` which only grabs a name).
+    import database as db_module  # noqa: E811
     import api as api_module
 
     _orig_db_SL = db_module.SessionLocal
@@ -425,7 +425,8 @@ def unauthenticated_client(_engine, db_session):
     app.dependency_overrides[get_db] = _override_get_db
 
     TestSessionLocal = sessionmaker(bind=_engine)
-    import database as db_module
+    # Module-level references for monkey-patching (see app_client fixture).
+    import database as db_module  # noqa: E811
     import api as api_module
 
     _orig_db_SL = db_module.SessionLocal

@@ -20,8 +20,14 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
+_logging_configured = False
+
+
 def setup_logging() -> None:
     """Configure root logger. Call once at application startup."""
+    global _logging_configured
+    if _logging_configured:
+        return
     logging.basicConfig(
         level=getattr(logging, LOG_LEVEL, logging.INFO),
         format=LOG_FORMAT,
@@ -33,6 +39,7 @@ def setup_logging() -> None:
     logging.getLogger("yfinance").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    _logging_configured = True
 
 
 def get_logger(name: str) -> logging.Logger:

@@ -1,8 +1,6 @@
 """
 Unit tests for the users module.
 """
-import pytest
-
 from users import (
     get_user_by_id,
     get_user_by_email,
@@ -71,5 +69,7 @@ class TestWatchlistOperations:
         add_to_watchlist(db_session, str(sample_user.id), "A.SA")
         add_to_watchlist(db_session, str(sample_user.id), "B.SA")
         wl = get_user_watchlist(db_session, str(sample_user.id))
-        # Should be ordered by created_at desc
+        # Should be ordered by created_at desc (most recent first)
         assert len(wl) >= 2
+        tickers = [w.ticker for w in wl]
+        assert tickers.index("B.SA") < tickers.index("A.SA")
