@@ -153,7 +153,7 @@ def detect_signals(data: Any) -> SignalResult:
     # Trend direction (above/below both MAs) --------------------------------
     above_50 = _get(data, "above_ma_50")
     above_200 = _get(data, "above_ma_200")
-    if above_50 and above_200:
+    if above_50 == 1 and above_200 == 1:
         result.bullish_trend = True
     elif above_50 == 0 and above_200 == 0:
         result.bearish_trend = True

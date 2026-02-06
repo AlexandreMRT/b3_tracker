@@ -787,7 +787,7 @@ async def test_login(email: str = "test@example.com", name: str = "Test User", d
     Development endpoint to create a test user and get a token.
     Only available when DEV_MODE=1 environment variable is set.
     """
-    if not os.getenv("DEV_MODE"):
+    if os.getenv("DEV_MODE") != "1":
         raise HTTPException(status_code=404, detail="Not found")
     
     import uuid

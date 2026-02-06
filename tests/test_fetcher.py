@@ -90,7 +90,7 @@ class TestCalculateTechnicalIndicators:
 
     def _make_hist(self, n_days=250, base_price=100.0, trend=0.0):
         """Create a DataFrame mimicking yfinance historical data."""
-        dates = pd.date_range(end="2026-02-05", periods=n_days, freq="B")
+        dates = pd.date_range(end=pd.Timestamp.now(), periods=n_days, freq="B")
         prices = base_price + trend * np.arange(n_days) + np.random.randn(n_days) * 0.5
         volumes = np.random.randint(1_000_000, 50_000_000, size=n_days)
         return pd.DataFrame({

@@ -2,7 +2,6 @@
 Unit tests for the users module.
 """
 import pytest
-from datetime import datetime
 
 from users import (
     get_user_by_id,
@@ -13,7 +12,6 @@ from users import (
     remove_from_watchlist,
     is_in_watchlist,
 )
-
 
 class TestUserOperations:
 
